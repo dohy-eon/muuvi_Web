@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        pretendard: ['Pretendard', 'sans-serif'],
+      },
       colors: {
         gray: {
           50: "#f0f2f4",
