@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useSetRecoilState } from 'recoil'
+import { onboardingDataState } from '../../recoil/userState'
 import CheckIcon from './check.svg'
 
 const genres = ['영화', '드라마', '애니메이션', '예능']
@@ -7,6 +9,7 @@ const genres = ['영화', '드라마', '애니메이션', '예능']
 export default function Onboarding() {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const navigate = useNavigate()
+  const setOnboardingData = useSetRecoilState(onboardingDataState)
 
   const toggleGenre = (genre: string) => {
     setSelectedGenre((prev) => (prev === genre ? null : genre))
@@ -14,6 +17,11 @@ export default function Onboarding() {
 
   const handleNext = () => {
     if (selectedGenre) {
+      // 첫 번째 선택 데이터를 Recoil에 저장
+      setOnboardingData({
+        genre: selectedGenre,
+        moods: [],
+      })
       navigate('/onboarding/step2')
     }
   }

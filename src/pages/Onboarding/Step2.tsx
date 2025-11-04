@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useRecoilValue, useSetRecoilState } from 'recoil'
+import { onboardingDataState } from '../../recoil/userState'
+import { saveProfile } from '../../lib/supabase/profile'
 import CheckIcon from './check.svg'
 
 interface Genre {
@@ -78,7 +81,10 @@ const genres: Genre[] = [
 
 export default function OnboardingStep2() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
+  const onboardingData = useRecoilValue(onboardingDataState)
+  const setOnboardingData = useSetRecoilState(onboardingDataState)
 
   const toggleGenre = (id: string) => {
     setSelectedGenres((prev) => {
@@ -95,9 +101,32 @@ export default function OnboardingStep2() {
     navigate('/onboarding')
   }
 
-  const handleComplete = () => {
-    // 온보딩 완료 후 메인으로 이동
-    navigate('/main')
+  const handleComplete = async () => {
+    if (!onboardingData || selectedGenres.length === 0) {
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      // 온보딩 데이터 업데이트
+      const updatedData = {
+        ...onboardingData,
+        moods: selectedGenres,
+      }
+      setOnboardingData(updatedData)
+
+      // Supabase에 저장 (임시로 localStorage 사용, 실제로는 인증된 user_id 필요)
+      const userId = 'temp-user-id' // 실제로는 인증된 사용자 ID 사용
+      await saveProfile(userId, updatedData)
+
+      // 메인 페이지로 이동
+      navigate('/main')
+    } catch (error) {
+      console.error('온보딩 완료 처리 중 오류:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -194,18 +223,20 @@ export default function OnboardingStep2() {
         <button
           onClick={handleComplete}
           className={`flex-1 h-12 rounded-[10px] flex items-center justify-center transition-colors ${
-            selectedGenres.length > 0
+            selectedGenres.length > 0 && !isLoading
               ? 'text-white'
               : 'bg-gray-300 text-white cursor-not-allowed'
           }`}
           style={
-            selectedGenres.length > 0
+            selectedGenres.length > 0 && !isLoading
               ? { backgroundColor: '#2e2c6a' }
               : undefined
           }
-          disabled={selectedGenres.length === 0}
+          disabled={selectedGenres.length === 0 || isLoading}
         >
-          <span className="text-base font-semibold">완료</span>
+          <span className="text-base font-semibold">
+            {isLoading ? '저장 중...' : '완료'}
+          </span>
         </button>
       </div>
     </div>
