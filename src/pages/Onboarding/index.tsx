@@ -1,13 +1,21 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import CheckIcon from './check.svg'
 
 const genres = ['영화', '드라마', '애니메이션', '예능']
 
 export default function Onboarding() {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   const toggleGenre = (genre: string) => {
     setSelectedGenre((prev) => (prev === genre ? null : genre))
+  }
+
+  const handleNext = () => {
+    if (selectedGenre) {
+      navigate('/onboarding/step2')
+    }
   }
 
   return (
@@ -71,7 +79,7 @@ export default function Onboarding() {
 
       {/* Action Buttons */}
       <div
-        className="fixed left-0 right-0 w-full px-5 flex justify-between"
+        className="fixed left-0 right-0 w-full px-5 flex gap-3"
         style={{
           bottom: `calc(3rem + env(safe-area-inset-bottom, 0px))`,
           maxWidth: '375px',
@@ -79,11 +87,12 @@ export default function Onboarding() {
           transform: 'translateX(-50%)',
         }}
       >
-        <button className="w-40 h-12 bg-gray-300 rounded-[10px] flex items-center justify-center">
+        <button className="flex-1 h-12 bg-gray-300 rounded-[10px] flex items-center justify-center">
           <span className="text-white text-base font-semibold">이전</span>
         </button>
         <button
-          className={`w-40 h-12 rounded-[10px] flex items-center justify-center transition-colors ${
+          onClick={handleNext}
+          className={`flex-1 h-12 rounded-[10px] flex items-center justify-center transition-colors ${
             selectedGenre !== null
               ? 'text-white'
               : 'bg-gray-300 text-white cursor-not-allowed'

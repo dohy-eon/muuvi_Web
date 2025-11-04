@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { RecoilRoot } from 'recoil'
 import Onboarding from './pages/Onboarding'
+import OnboardingStep2 from './pages/Onboarding/Step2'
 import Main from './pages/Main'
 import Content from './pages/Content'
 import MyPage from './pages/MyPage'
@@ -16,6 +17,7 @@ export default function App() {
           <div className="w-full max-w-[375px] min-h-screen bg-white relative">
             <Routes>
               <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
               <Route path="/main" element={<Main />} />
               <Route path="/content/:id" element={<Content />} />
               <Route path="/mypage" element={<MyPage />} />
