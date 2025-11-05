@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRecoilValue } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
@@ -7,6 +7,9 @@ import RecommendationLoading from '../../components/RecommendationLoading'
 import RecommendationCard from '../../components/RecommendationCard'
 import BottomNavigation from '../../components/BottomNavigation'
 import type { Content, Profile } from '../../types'
+import Reload from '../../assets/reload.svg'
+import RecommendActive from '../../assets/RecommendActive.svg'
+import RecommendInactive from '../../assets/RecommendInactive.svg'
 
 // 무드 ID를 한글 이름으로 매핑
 const moodIdToKorean: Record<string, string> = {
@@ -26,9 +29,10 @@ export default function Main() {
   const [isLoading, setIsLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [recommendEnabled, setRecommendEnabled] = useState(true)
 
-  useEffect(() => {
-    const loadRecommendations = async () => {
+  const loadRecommendations = useCallback(async () => {
       try {
         // 임시 user_id (실제로는 인증된 사용자 ID 사용)
         const userId = 'temp-user-id'
@@ -53,10 +57,12 @@ export default function Main() {
       } finally {
         setIsLoading(false)
       }
-    }
-
-    loadRecommendations()
   }, [onboardingData])
+
+  useEffect(() => {
+    setIsLoading(true)
+    loadRecommendations()
+  }, [loadRecommendations, reloadKey])
 
   if (isLoading) {
     return <RecommendationLoading profile={profile} onboardingData={onboardingData} />
@@ -70,11 +76,7 @@ export default function Main() {
     .map((id) => moodIdToKorean[id] || id)
     .join(', ')
 
-  const currentTime = new Date().toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  
 
   return (
     <div className="w-full h-[812px] relative bg-white overflow-hidden font-pretendard">
@@ -108,14 +110,28 @@ export default function Main() {
         </div>
       )}
 
-      {/* Loading Indicators */}
-      <div className="size-8 left-[148px] top-[548px] absolute overflow-hidden">
-        <div className="size-7 left-[2px] top-[2px] absolute bg-primary-900"></div>
-      </div>
-      <div className="size-8 left-[196px] top-[548px] absolute overflow-hidden">
-        <div className="size-7 left-[2px] top-[2px] absolute border-[3px] border-primary-900"></div>
-        <div className="size-5 left-[6.50px] top-[7px] absolute outline outline-[3px] outline-offset-[-1.50px] outline-primary-900"></div>
-      </div>
+      {/* Reload Button */}
+      <button
+        type="button"
+        aria-label="reload-recommendations"
+        className="size-8 left-[148px] top-[548px] absolute overflow-hidden flex items-center justify-center rounded-full bg-white/0"
+        onClick={() => setReloadKey((k) => k + 1)}
+      >
+        <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
+      </button>
+      {/* Recommend Toggle Button (Right) */}
+      <button
+        type="button"
+        aria-label="toggle-recommend"
+        className="size-8 left-[196px] top-[548px] absolute overflow-hidden flex items-center justify-center rounded-full bg-white/0"
+        onClick={() => setRecommendEnabled((v) => !v)}
+      >
+        <img
+          src={recommendEnabled ? RecommendActive : RecommendInactive}
+          alt="recommend-toggle"
+          className="w-[28px] h-[28px]"
+        />
+      </button>
 
       {/* Recommendation Cards */}
       {recommendations.length === 0 ? (

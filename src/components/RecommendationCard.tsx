@@ -1,9 +1,15 @@
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import RecommendActive from '../assets/RecommendActive.svg'
+import RecommendInactive from '../assets/RecommendInactive.svg'
+import Reload from '../assets/reload.svg'
 
 interface RecommendationCardProps {
   content: Content
   index: number
+  onToggleRecommend?: (content: Content, recommended: boolean) => void
+  onReload?: () => void
 }
 
 // 무드 ID를 한글 이름으로 매핑
@@ -32,8 +38,9 @@ const moodTagColors: Record<string, string> = {
   '09': 'bg-gray-500', // 미스테리
 }
 
-export default function RecommendationCard({ content, index }: RecommendationCardProps) {
+export default function RecommendationCard({ content, index, onToggleRecommend, onReload }: RecommendationCardProps) {
   const navigate = useNavigate()
+  const [recommended, setRecommended] = useState(false)
   
   // 태그를 무드 한글로 변환 (임시로 tags 배열의 첫 번째 요소 사용)
   // 실제로는 Content 타입에 moods 필드가 추가되어야 함
@@ -60,6 +67,25 @@ export default function RecommendationCard({ content, index }: RecommendationCar
   const handleClick = () => {
     if (content.id) {
       navigate(`/content/${content.id}`)
+    }
+  }
+
+  const handleRecommendClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRecommended((prev) => {
+      const next = !prev
+      onToggleRecommend?.(content, next)
+      return next
+    })
+  }
+
+  const handleReloadClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onReload) {
+      onReload()
+    } else {
+      // 기본 동작: 페이지 리로드 (임시)
+      location.reload()
     }
   }
 
@@ -90,10 +116,6 @@ export default function RecommendationCard({ content, index }: RecommendationCar
       <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 text-center text-white text-xs font-normal font-pretendard">
         {content.genres?.[0] || '영화'} •{content.year || ''}
       </div>
-      
-      {/* 아이콘들 (좋아요, 북마크 등) */}
-      <div className="absolute bottom-[68px] left-[20px] size-5 rounded-md bg-gray-500/50"></div>
-      <div className="absolute bottom-[68px] left-[48px] size-5 rounded-md bg-gray-500/50"></div>
       
       {/* 태그들 */}
       <div className="absolute bottom-[32px] left-1/2 -translate-x-1/2 flex gap-2">
