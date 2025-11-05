@@ -1,5 +1,5 @@
 import type { Profile, OnboardingData } from '../types'
-import MLogo from './M.svg'
+import MLogo from '../assets/M.svg'
 
 // 무드 ID를 한글 이름으로 매핑
 const moodIdToKorean: Record<string, string> = {
