@@ -3,11 +3,13 @@ import { useRecoilValue } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
-import type { Content } from '../../types'
+import RecommendationLoading from '../../components/RecommendationLoading'
+import type { Content, Profile } from '../../types'
 
 export default function Main() {
   const [recommendations, setRecommendations] = useState<Content[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
 
   useEffect(() => {
@@ -25,6 +27,8 @@ export default function Main() {
         }
 
         if (profile) {
+          // 프로필 저장
+          setProfile(profile)
           // 추천 콘텐츠 가져오기
           const contents = await getRecommendations(profile)
           setRecommendations(contents)
@@ -39,14 +43,16 @@ export default function Main() {
     loadRecommendations()
   }, [onboardingData])
 
+  if (isLoading) {
+    return <RecommendationLoading profile={profile} onboardingData={onboardingData} />
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8">추천 콘텐츠</h1>
         
-        {isLoading ? (
-          <p className="text-center text-gray-600">추천 콘텐츠를 불러오는 중...</p>
-        ) : recommendations.length === 0 ? (
+        {recommendations.length === 0 ? (
           <p className="text-center text-gray-600">추천 콘텐츠가 없습니다.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
