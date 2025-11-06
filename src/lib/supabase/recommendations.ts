@@ -110,11 +110,37 @@ async function enrichContentWithOTT(content: Content): Promise<Content> {
 
 /**
  * 사용자 프로필 기반 추천 콘텐츠 가져오기
+ * @param profile 사용자 프로필
+ * @param forceRefresh 기존 추천 내역을 무시하고 무조건 새로 가져올지 여부 (기본값: false)
  */
 export async function getRecommendations(
-  profile: Profile
+  profile: Profile,
+  forceRefresh: boolean = false
 ): Promise<Content[]> {
   try {
+    // forceRefresh가 true이면 기존 콘텐츠를 무시하고 무조건 TMDB에서 새로 가져오기
+    if (forceRefresh) {
+      console.log('[강제 새로고침] 기존 추천 내역 무시하고 TMDB에서 새로 가져오는 중...')
+      const newContents = await fetchAndSaveRecommendations(
+        profile.genre,
+        profile.moods
+      )
+
+      // 중복 제거 및 정렬
+      const uniqueContents = Array.from(
+        new Map(newContents.map((c) => [c.id, c])).values()
+      )
+        .sort((a, b) => (b.imdb_rating || 0) - (a.imdb_rating || 0))
+        .slice(0, 3)
+
+      // OTT 정보가 없는 콘텐츠에 대해 동적으로 가져오기
+      const enrichedContents = await Promise.all(
+        uniqueContents.map((content) => enrichContentWithOTT(content))
+      )
+
+      return enrichedContents
+    }
+
     // 1. 먼저 Supabase에 저장된 콘텐츠 확인
     let query = supabase.from('contents').select('*')
 

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 interface RecommendationCardProps {
   content: Content
   index: number
+  selectedMoods?: string[] // 선택한 무드 ID 배열 (최대 2개)
 }
 
 // 무드 ID를 한글 이름으로 매핑
@@ -33,14 +34,16 @@ const moodTagColors: Record<string, string> = {
   '09': 'bg-[#7f8c8d]', // 미스테리
 }
 
-export default function RecommendationCard({ content, index }: RecommendationCardProps) {
+export default function RecommendationCard({ content, index, selectedMoods }: RecommendationCardProps) {
   const navigate = useNavigate()
   
-  
   // 실제 무드 데이터 사용 (최대 2개)
+  // 우선순위: 1. content.moods (콘텐츠에 저장된 무드) 2. selectedMoods (사용자가 선택한 무드)
   const moodIds = content.moods && content.moods.length > 0 
     ? content.moods.slice(0, 2) 
-    : ['01', '03'] // 기본값 (로맨스, 코미디)
+    : (selectedMoods && selectedMoods.length > 0 
+      ? selectedMoods.slice(0, 2) 
+      : []) // 무드가 없으면 태그를 표시하지 않음
   
   // 카드 위치 계산 (좌우 배치)
   const isLeft = index % 2 === 0
@@ -116,24 +119,26 @@ export default function RecommendationCard({ content, index }: RecommendationCar
         </div>
       )}
 
-      {/* 태그들 - 좌하단 */}
-      <div className="absolute left-8 bottom-4 flex gap-2">
-        {moodIds.map((moodId, tagIndex) => {
-          const tagText = moodIdToKorean[moodId] || '로맨스'
-          const tagColor = moodTagColors[moodId] || 'bg-[#ffbdbd]'
+      {/* 태그들 - 좌하단 (무드가 있을 때만 표시) */}
+      {moodIds.length > 0 && (
+        <div className="absolute left-8 bottom-4 flex gap-2">
+          {moodIds.map((moodId, tagIndex) => {
+            const tagText = moodIdToKorean[moodId] || '로맨스'
+            const tagColor = moodTagColors[moodId] || 'bg-[#ffbdbd]'
 
-          return (
-            <div
-              key={tagIndex}
-              className={`w-10 h-5 ${tagColor} rounded-md overflow-hidden flex items-center justify-center`}
-            >
-              <div className="text-center text-white text-[10px] font-normal font-pretendard">
-                {tagText}
+            return (
+              <div
+                key={tagIndex}
+                className={`w-10 h-5 ${tagColor} rounded-md overflow-hidden flex items-center justify-center`}
+              >
+                <div className="text-center text-white text-[10px] font-normal font-pretendard">
+                  {tagText}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -36,14 +36,31 @@ export default function Main() {
   const [recommendEnabled, setRecommendEnabled] = useState(true)
 
   // 온보딩으로 이동하는 함수
-  const handleRestart = () => {
+  const handleRestart = async () => {
+    // 기존 추천 내역 초기화
+    setRecommendations([])
+    setIsLoading(true)
+    
+    // 프로필이 있으면 강제로 새로 추천 받기 (기존 내역 무시)
+    if (profile) {
+      try {
+        const contents = await getRecommendations(profile, true) // forceRefresh = true
+        setRecommendations(contents)
+        setIsLoading(false)
+      } catch (error) {
+        console.error('새 추천 가져오기 실패:', error)
+      }
+    }
+    
     // 온보딩 데이터 초기화
     setOnboardingData(null)
+    // 프로필 초기화 (온보딩으로 돌아가기 위해)
+    setProfile(null)
     // 온보딩 페이지로 이동
     navigate('/onboarding')
   }
 
-  const loadRecommendations = useCallback(async () => {
+  const loadRecommendations = useCallback(async (forceRefresh: boolean = false) => {
       try {
         // 임시 user_id (실제로는 인증된 사용자 ID 사용)
         const userId = 'temp-user-id'
@@ -59,8 +76,8 @@ export default function Main() {
         if (profile) {
           // 프로필 저장
           setProfile(profile)
-          // 추천 콘텐츠 가져오기
-          const contents = await getRecommendations(profile)
+          // 추천 콘텐츠 가져오기 (forceRefresh가 true이면 기존 내역 무시하고 새로 가져오기)
+          const contents = await getRecommendations(profile, forceRefresh)
           setRecommendations(contents)
         }
       } catch (error) {
@@ -162,7 +179,12 @@ export default function Main() {
         </div>
       ) : (
         recommendations.slice(0, 2).map((content, index) => (
-          <RecommendationCard key={content.id} content={content} index={index} />
+          <RecommendationCard 
+            key={content.id} 
+            content={content} 
+            index={index} 
+            selectedMoods={displayMoods}
+          />
         ))
       )}
     </div>
