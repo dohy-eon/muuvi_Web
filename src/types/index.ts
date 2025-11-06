@@ -20,7 +20,8 @@ export interface Content {
   imdb_id?: string
   imdb_rating?: number
   year?: number
-  genres?: string[]
+  genre?: string // '영화', '드라마', '애니메이션', '예능' (Supabase DB의 genre 컬럼)
+  genres?: string[] // 장르 배열 (TMDB에서 가져온 장르 목록)
   tags?: string[]
   moods?: string[] // 무드 ID 배열 (예: ['01', '03'])
   url?: string
