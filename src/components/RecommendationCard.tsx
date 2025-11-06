@@ -69,13 +69,13 @@ export default function RecommendationCard({ content, index, selectedMoods }: Re
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/90" />
 
-      {/* 제목/정보 - 좌하단 정렬 */}
-      <div className="absolute left-8 bottom-20 text-left text-white">
-        <div className="text-base font-semibold font-pretendard">{content.title}</div>
-        <div className="mt-1 text-xs font-normal font-pretendard opacity-90">
-          {(content.genres?.[0] || '영화')} •{content.year || ''}
-        </div>
-      </div>
+            {/* 제목/정보 - 좌하단 정렬 */}
+            <div className="absolute left-8 bottom-20 text-left text-white">
+              <div className="text-base font-semibold font-pretendard">{content.title}</div>
+              <div className="mt-1 text-xs font-normal font-pretendard opacity-90">
+                {content.genre || content.genres?.[0] || '영화'} •{content.year || ''}
+              </div>
+            </div>
 
       {/* 작은 포스터 썸네일 - 우하단 */}
       {content.poster_url && (

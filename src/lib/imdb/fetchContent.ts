@@ -117,72 +117,45 @@ async function fetchMoviesFromTMDB(
       // 'with_original_language': 'ko', // 한국 작품 우선 (선택사항) - 주석 처리하여 검색 범위 확대
     })
 
-    // 장르 필터 추가 (선택한 장르 우선)
-    const genreIds: number[] = []
-    const selectedGenreId = genre !== '영화' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
-    
-    // 선택한 장르가 있으면 우선 적용 (필수)
-    if (selectedGenreId) {
-      genreIds.push(selectedGenreId)
-      console.log('[장르 필터]', { genre, genreId: selectedGenreId })
-    } else {
-      console.log('[장르 필터] 없음 (또는 영화)', { genre })
-    }
-    
-    // 무드를 TMDB 파라미터로 변환
+    // 무드를 TMDB 파라미터로 변환 (키워드와 정렬 기준을 가져옴)
     const moodParams = moodsToTMDBParams(moods)
     console.log('[무드 파라미터]', {
       moods,
-      genres: moodParams.genres,
-      keywords: moodParams.keywords,
+      genres: moodParams.genres, // 참고용 (사용 안 함)
+      keywords: moodParams.keywords, // 사용할 키워드
       sortBy: moodParams.sortBy,
     })
-    
-    // 무드에서 나온 장르 ID 추가
-    if (moodParams.genres && moodParams.genres.length > 0) {
-      if (genreIds.length > 0) {
-        // 장르와 무드를 모두 포함 (AND 조건 - 드라마 + 판타지)
-        genreIds.push(...moodParams.genres)
-        console.log('[장르+무드 조합]', { combinedGenres: genreIds })
-      } else {
-        // 장르가 없으면 무드만 사용
-        genreIds.push(...moodParams.genres)
-        console.log('[무드 장르만 사용]', { moodGenres: genreIds })
-      }
+
+    // 1. [장르 필터] 적용
+    // '영화'는 엔드포인트(/discover/movie) 자체로 필터링됩니다.
+    // '예능'은 아래 'with_type'으로 필터링됩니다.
+    // '드라마', '애니메이션'만 with_genres에 ID를 명시적으로 추가합니다.
+    const selectedGenreId = genre !== '영화' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
+
+    if (selectedGenreId && (genre === '드라마' || genre === '애니메이션')) {
+      params.append('with_genres', selectedGenreId.toString())
+      console.log('[장르 필터 적용]', { genre, genreId: selectedGenreId })
     } else {
-      console.log('[무드 장르] 없음')
+      console.log('[장르 필터] 없음 (영화 또는 예능)', { genre })
     }
-    
-    // 중복 제거
-    const uniqueGenreIds = Array.from(new Set(genreIds))
-    console.log('[최종 장르 필터]', { uniqueGenreIds })
-    
-    // 장르 ID가 있으면 필터 추가
-    if (uniqueGenreIds.length > 0) {
-      // TMDB는 여러 장르를 쉼표로 구분 (AND 조건)
-      params.append('with_genres', uniqueGenreIds.join(','))
-      console.log('[TMDB 장르 필터 적용]', uniqueGenreIds.join(','))
-    } else {
-      console.warn('[경고] 장르 필터가 없습니다 - 검색 범위가 넓어질 수 있습니다')
-    }
-    
-    // 키워드 필터 추가 (무드 기반)
-    // TMDB 문서: with_keywords는 파이프(|)로 OR 조건, 콤마(,)로 AND 조건
-    // 무드는 감정/분위기이므로 OR 조건(파이프) 사용이 더 적합
+
+    // 2. [무드 필터] 적용 (키워드 기반)
+    // 무드에서 파생된 장르(moodParams.genres)는 의도치 않은 AND 조건으로
+    // 검색 결과를 0으로 만드므로, 키워드(moodParams.keywords)만 사용합니다.
     if (moodParams.keywords && moodParams.keywords.length > 0) {
       // 여러 키워드를 OR 조건(|)으로 연결하여 더 넓은 범위 검색
       const keywordString = moodParams.keywords.join('|')
       params.append('with_keywords', keywordString)
-      console.log('[키워드 필터]', { 
+      console.log('[무드 필터 적용]', {
         keywordIds: moodParams.keywords,
         keywordString,
         논리: 'OR (|)',
       })
     } else {
-      console.log('[키워드 필터] 없음')
+      console.log('[무드 필터] 없음')
     }
-    
-    // 정렬 기준 설정 (무드 기반 또는 기본값)
+
+    // 3. [정렬 기준] 적용
     params.append('sort_by', moodParams.sortBy || 'vote_average.desc')
     console.log('[정렬 기준]', moodParams.sortBy || 'vote_average.desc')
     
@@ -291,28 +264,22 @@ async function fetchMoviesFromTMDB(
           console.log('[재검색 성공] 필터 완화로 결과 찾음')
           return retryData.results.slice(0, limit) || []
         } else {
-          // AND 조건으로 결과가 없으면 OR 조건으로 시도 (장르만)
-          if (uniqueGenreIds.length > 1) {
-            console.warn('[재검색 실패] AND 조건 실패, OR 조건으로 재시도...', {
-              AND조건: uniqueGenreIds.join(','),
-              OR조건: uniqueGenreIds.join('|'),
-            })
-            
-            // 장르 필터를 OR 조건(|)으로 변경
-            params.set('with_genres', uniqueGenreIds.join('|'))
+          // 키워드 필터만 제거하고 재시도 (장르 필터는 유지)
+          if (moodParams.keywords && moodParams.keywords.length > 0) {
+            console.warn('[재검색 실패] 키워드 필터 제거하고 재시도...')
             
             // 키워드 필터 제거 (너무 제한적일 수 있음)
             params.delete('with_keywords')
             
-            const orRetryUrl = `${TMDB_BASE_URL}/${endpoint}?${params.toString()}`
-            console.log('[OR 조건 재검색]', orRetryUrl)
+            const keywordRetryUrl = `${TMDB_BASE_URL}/${endpoint}?${params.toString()}`
+            console.log('[키워드 제거 후 재검색]', keywordRetryUrl)
             
-            const orRetryResponse = await fetch(orRetryUrl)
-            if (orRetryResponse.ok) {
-              const orRetryData = await orRetryResponse.json()
-              if (orRetryData.results && orRetryData.results.length > 0) {
-                console.log('[OR 조건 재검색 성공]', { 결과수: orRetryData.results.length })
-                return orRetryData.results.slice(0, limit) || []
+            const keywordRetryResponse = await fetch(keywordRetryUrl)
+            if (keywordRetryResponse.ok) {
+              const keywordRetryData = await keywordRetryResponse.json()
+              if (keywordRetryData.results && keywordRetryData.results.length > 0) {
+                console.log('[키워드 제거 후 재검색 성공]', { 결과수: keywordRetryData.results.length })
+                return keywordRetryData.results.slice(0, limit) || []
               }
             }
           }
@@ -320,7 +287,7 @@ async function fetchMoviesFromTMDB(
           console.error('[재검색 실패] 모든 필터 완화 후에도 결과 없음', {
             최종필터: {
               엔드포인트: endpoint,
-              장르: uniqueGenreIds.length > 0 ? uniqueGenreIds.join(',') : '없음',
+              장르: selectedGenreId ? selectedGenreId.toString() : '없음',
               키워드: moodParams.keywords ? moodParams.keywords.join('|') : '없음',
               최소평가수: '50 (완화됨)',
             },
