@@ -79,6 +79,14 @@ const genres: Genre[] = [
   },
 ]
 
+/**
+ * 특정 장르와 호환되지 않는 무드 ID 맵
+ * (현재는 사용하지 않음 - 드라마, 예능 장르 제거됨)
+ */
+const GENRE_INCOMPATIBLE_MOODS: Record<string, string[]> = {
+  // 필요시 다른 장르의 규칙도 추가 가능
+}
+
 export default function OnboardingStep2() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -86,7 +94,24 @@ export default function OnboardingStep2() {
   const onboardingData = useRecoilValue(onboardingDataState)
   const setOnboardingData = useSetRecoilState(onboardingDataState)
 
+  // 현재 선택된 장르 (1단계에서 선택한 장르)
+  const selectedGenre = onboardingData?.genre
+  // 비활성화할 무드 ID 목록
+  const incompatibleMoods =
+    (selectedGenre ? GENRE_INCOMPATIBLE_MOODS[selectedGenre] : []) || []
+
+  /**
+   * 무드 선택/해제 토글 함수
+   * 비활성화된 무드 클릭 시 알림창을 띄웁니다.
+   */
   const toggleGenre = (id: string) => {
+    const isDisabled = incompatibleMoods.includes(id)
+
+    if (isDisabled && selectedGenre) {
+      alert(`'${selectedGenre}' 장르와 조합하기 어려운 무드입니다.`)
+      return // 선택 방지
+    }
+
     setSelectedGenres((prev) => {
       if (prev.includes(id)) {
         return prev.filter((g) => g !== id)
@@ -155,7 +180,7 @@ export default function OnboardingStep2() {
       <div className="px-5 max-w-md mx-auto flex flex-col justify-center min-h-[calc(100vh-8rem-80px)]">
         {/* Title */}
         <h1 className="text-center text-black text-2xl font-semibold mb-2 leading-tight">
-          오늘은 어떤 영상으로
+          {selectedGenre ? `'${selectedGenre}' 장르 중에서` : '오늘은 어떤 영상으로'}
           <br />
           추천드릴까요?
         </h1>
@@ -167,17 +192,26 @@ export default function OnboardingStep2() {
         <div className="w-full grid grid-cols-3 gap-2">
           {genres.map((genre) => {
             const isSelected = selectedGenres.includes(genre.id)
+            // 비활성화 여부 확인
+            const isDisabled = incompatibleMoods.includes(genre.id)
+            
             return (
               <button
                 key={genre.id}
                 onClick={() => toggleGenre(genre.id)}
-                className={`aspect-square rounded-[10px] bg-gray-50 relative overflow-hidden transition-colors ${
-                  isSelected
-                    ? 'bg-white border-2'
-                    : 'border-2 border-transparent'
+                className={`aspect-square rounded-[10px] relative overflow-hidden transition-colors ${
+                  isSelected && !isDisabled
+                    ? 'bg-white border-2' // 선택됨 (비활성화 아님)
+                    : 'border-2 border-transparent' // 선택 안됨
+                } ${
+                  isDisabled
+                    ? 'bg-gray-200 opacity-60 cursor-not-allowed' // 비활성화됨
+                    : 'bg-gray-50' // 기본
                 }`}
                 style={
-                  isSelected ? { borderColor: '#2e2c6a' } : undefined
+                  isSelected && !isDisabled // 비활성화 상태가 아닐 때만 선택 테두리 표시
+                    ? { borderColor: '#2e2c6a' }
+                    : undefined
                 }
               >
                 <div className="absolute left-2 top-2 text-gray-900 text-xs font-light">
