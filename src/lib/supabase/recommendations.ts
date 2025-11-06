@@ -61,24 +61,47 @@ async function enrichContentWithOTT(content: Content): Promise<Content> {
     }
 
     // TMDB ID로 OTT 정보 가져오기
+    // 중요: content.genre 필드를 우선 확인하여 타입 결정
+    // "영화"를 선택했으면 무조건 movie, "애니메이션"을 선택했으면 무조건 tv
+    let finalContentType: 'movie' | 'tv' = contentType
+    
+    if (content.genre === '영화') {
+      // 영화를 선택했으면 무조건 movie로 처리 (드라마 장르가 있어도)
+      finalContentType = 'movie'
+      console.log('[OTT 정보] 영화 장르 확인 - movie 엔드포인트 사용', { tmdbId, genre: content.genre })
+    } else if (content.genre === '애니메이션') {
+      // 애니메이션을 선택했으면 무조건 tv로 처리
+      finalContentType = 'tv'
+      console.log('[OTT 정보] 애니메이션 장르 확인 - tv 엔드포인트 사용', { tmdbId, genre: content.genre })
+    }
+    
     const endpoint =
-      contentType === 'tv'
+      finalContentType === 'tv'
         ? `${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers`
         : `${TMDB_BASE_URL}/movie/${tmdbId}/watch/providers`
     
     let ottResponse = await fetch(`${endpoint}?api_key=${TMDB_API_KEY}`)
     
-    // movie가 실패하면 tv로 시도 (타입이 잘못되었을 수 있음)
-    if (!ottResponse.ok && contentType === 'movie') {
+    // movie가 실패하면 tv로 시도 (단, content.genre가 "영화"가 아닐 때만)
+    // "영화"를 선택했다면 movie 실패 시 재시도하지 않음 (404가 정상일 수 있음)
+    if (!ottResponse.ok && finalContentType === 'movie' && content.genre !== '영화') {
+      console.warn('[OTT 정보] movie 실패, tv로 재시도...', { tmdbId, status: ottResponse.status })
       ottResponse = await fetch(
         `${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`
       )
       if (ottResponse.ok) {
-        contentType = 'tv'
+        finalContentType = 'tv'
+        console.log('[OTT 정보] tv 엔드포인트로 성공', { tmdbId })
       }
     }
 
     if (!ottResponse.ok) {
+      console.warn('[OTT 정보] 실패', { 
+        tmdbId, 
+        contentType: finalContentType, 
+        genre: content.genre,
+        status: ottResponse.status,
+      })
       return content
     }
 
@@ -142,9 +165,24 @@ export async function getRecommendations(
       })
 
       // 중복 제거 및 정렬
-      const uniqueContents = Array.from(
-        new Map(genreFilteredContents.map((c) => [c.id, c])).values()
-      )
+      // 중복 제거 키: imdb_id > (title + year) > id
+      const uniqueContentsMap = new Map<string, Content>()
+      for (const content of genreFilteredContents) {
+        let key: string
+        if (content.imdb_id) {
+          key = `imdb_${content.imdb_id}`
+        } else if (content.title && content.year) {
+          key = `title_${content.title}_${content.year}`
+        } else {
+          key = `id_${content.id}`
+        }
+        // 이미 존재하는 경우 더 높은 평점을 가진 것을 유지
+        if (!uniqueContentsMap.has(key) || (content.imdb_rating || 0) > (uniqueContentsMap.get(key)?.imdb_rating || 0)) {
+          uniqueContentsMap.set(key, content)
+        }
+      }
+      
+      const uniqueContents = Array.from(uniqueContentsMap.values())
         .sort((a, b) => (b.imdb_rating || 0) - (a.imdb_rating || 0))
         .slice(0, 3)
 
@@ -206,9 +244,24 @@ export async function getRecommendations(
       const allContents = [...(existingContents || []), ...genreFilteredNewContents]
       
       // 중복 제거 및 정렬
-      const uniqueContents = Array.from(
-        new Map(allContents.map((c) => [c.id, c])).values()
-      )
+      // 중복 제거 키: imdb_id > (title + year) > id
+      const uniqueContentsMap = new Map<string, Content>()
+      for (const content of allContents) {
+        let key: string
+        if (content.imdb_id) {
+          key = `imdb_${content.imdb_id}`
+        } else if (content.title && content.year) {
+          key = `title_${content.title}_${content.year}`
+        } else {
+          key = `id_${content.id}`
+        }
+        // 이미 존재하는 경우 더 높은 평점을 가진 것을 유지
+        if (!uniqueContentsMap.has(key) || (content.imdb_rating || 0) > (uniqueContentsMap.get(key)?.imdb_rating || 0)) {
+          uniqueContentsMap.set(key, content)
+        }
+      }
+      
+      const uniqueContents = Array.from(uniqueContentsMap.values())
         .sort((a, b) => (b.imdb_rating || 0) - (a.imdb_rating || 0))
         .slice(0, 3)
 
@@ -237,7 +290,7 @@ export async function getRecommendations(
 
     // 3. 상위 3개 반환하고 OTT 정보 추가
     // 장르 필터링이 쿼리에서 적용되었지만, 혹시 모를 경우를 대비해 한 번 더 필터링
-    let topContents = (existingContents || []).slice(0, 3)
+    let topContents = (existingContents || [])
     
     if (profile.genre) {
       // 장르가 일치하는 것만 필터링
@@ -249,6 +302,28 @@ export async function getRecommendations(
         필터링된장르들: topContents.map((c) => c.genre),
       })
     }
+    
+    // 중복 제거 (같은 영화가 여러 번 저장된 경우)
+    // 중복 제거 키: imdb_id > (title + year) > id
+    const uniqueContentsMap = new Map<string, Content>()
+    for (const content of topContents) {
+      let key: string
+      if (content.imdb_id) {
+        key = `imdb_${content.imdb_id}`
+      } else if (content.title && content.year) {
+        key = `title_${content.title}_${content.year}`
+      } else {
+        key = `id_${content.id}`
+      }
+      // 이미 존재하는 경우 더 높은 평점을 가진 것을 유지
+      if (!uniqueContentsMap.has(key) || (content.imdb_rating || 0) > (uniqueContentsMap.get(key)?.imdb_rating || 0)) {
+        uniqueContentsMap.set(key, content)
+      }
+    }
+    
+    topContents = Array.from(uniqueContentsMap.values())
+      .sort((a, b) => (b.imdb_rating || 0) - (a.imdb_rating || 0))
+      .slice(0, 3)
     
     // OTT 정보가 없는 콘텐츠에 대해 동적으로 가져오기 (병렬 처리)
     const enrichedContents = await Promise.all(

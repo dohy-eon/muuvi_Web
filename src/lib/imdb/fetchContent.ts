@@ -451,23 +451,33 @@ async function saveContentToSupabase(
   selectedGenre?: string
 ): Promise<Content | null> {
   try {
-    // 중요: 선택한 장르가 TV 타입이면 무조건 TV로 처리
-    // TMDB에서 Drama(18)는 Movie와 TV 모두에 존재하므로 선택한 장르를 우선 사용
-    const isSelectedGenreTV = selectedGenre === '드라마' || selectedGenre === '예능' || selectedGenre === '애니메이션'
-    
+    // 중요: 선택한 장르를 우선적으로 확인
+    // 1. "영화"를 선택했으면 무조건 movie로 처리 (드라마 장르가 있어도 영화)
+    // 2. "애니메이션"을 선택했으면 무조건 tv로 처리
     let contentType: 'movie' | 'tv' = 'movie'
     
-    if (isSelectedGenreTV) {
-      // TV 장르를 선택했으면 무조건 TV로 처리
+    if (selectedGenre === '영화') {
+      // 영화를 선택했으면 무조건 movie로 처리 (장르 ID와 무관)
+      contentType = 'movie'
+      console.log('[콘텐츠 타입] 영화 장르 선택됨 - 무조건 movie', { selectedGenre, contentType })
+    } else if (selectedGenre === '애니메이션') {
+      // 애니메이션을 선택했으면 무조건 tv로 처리
       contentType = 'tv'
-      console.log('[콘텐츠 타입] TV 장르 선택됨', { selectedGenre, contentType })
+      console.log('[콘텐츠 타입] 애니메이션 장르 선택됨 - 무조건 tv', { selectedGenre, contentType })
     } else {
-      // 장르 판단 (드라마, 예능, 애니메이션은 tv)
+      // 장르가 없거나 다른 경우, 장르 ID로 판단
       // 드라마: 18, 애니메이션: 16, 예능: 10770
       const isTVContent = movie.genre_ids.includes(18) || 
                           movie.genre_ids.includes(16) || 
                           movie.genre_ids.includes(10770)
       contentType = isTVContent ? 'tv' : 'movie'
+      console.log('[콘텐츠 타입] 장르 ID로 판단', { 
+        selectedGenre, 
+        contentType, 
+        genreIds: movie.genre_ids,
+        hasDrama: movie.genre_ids.includes(18),
+        hasAnimation: movie.genre_ids.includes(16),
+      })
     }
     
     // append_to_response로 상세 정보 한 번에 가져오기
@@ -478,10 +488,12 @@ async function saveContentToSupabase(
     const ottProviders = await getWatchProvidersFromTMDB(movie.id, contentType)
 
     // 장르 목록 가져오기 (TV와 Movie 구분)
-    // 선택한 장르가 TV 타입이면 무조건 TV, 아니면 장르 ID로 판단
-    const genreType = isSelectedGenreTV 
-      ? 'tv' 
-      : (movie.genre_ids.some(id => id === 18 || id === 16 || id === 10770) ? 'tv' : 'movie')
+    // 선택한 장르를 우선 확인: "영화"면 movie, "애니메이션"이면 tv, 아니면 장르 ID로 판단
+    const genreType = selectedGenre === '영화'
+      ? 'movie'
+      : (selectedGenre === '애니메이션' 
+        ? 'tv' 
+        : (movie.genre_ids.some(id => id === 18 || id === 16 || id === 10770) ? 'tv' : 'movie'))
     const genreResponseKo = await fetch(
       `${TMDB_BASE_URL}/genre/${genreType}/list?api_key=${TMDB_API_KEY}&language=ko-KR`
     )
@@ -513,21 +525,22 @@ async function saveContentToSupabase(
     const allTags = [...genres, ...englishTags]
 
     // 장르 판단 (우선순위: 선택한 장르 > 드라마 > 애니메이션 > 예능 > 영화)
-    // 중요: 선택한 장르가 TV 타입(드라마, 예능, 애니메이션)이면 무조건 해당 장르로 저장
+    // 중요: "영화"를 선택했으면 무조건 "영화"로 저장 (드라마 장르가 있어도)
     const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID
     
     let contentGenre = '영화' // 기본값
     
-    // 선택한 장르가 TV 타입인지 확인 (위에서 이미 선언됨)
-    // isSelectedGenreTV 변수는 함수 상단에서 이미 선언되어 있음
-    
-    if (selectedGenre && selectedGenre !== '영화') {
-      if (isSelectedGenreTV) {
-        // TV 장르를 선택했으면 무조건 해당 장르로 저장 (엔드포인트에서 TV로 검색했으므로)
-        contentGenre = selectedGenre
-        console.log('[장르 저장] TV 장르 선택됨', { selectedGenre, contentGenre })
+    if (selectedGenre) {
+      if (selectedGenre === '영화') {
+        // 영화를 선택했으면 무조건 "영화"로 저장
+        contentGenre = '영화'
+        console.log('[장르 저장] 영화 장르 선택됨 - 무조건 영화로 저장', { selectedGenre, contentGenre })
+      } else if (selectedGenre === '애니메이션') {
+        // 애니메이션을 선택했으면 무조건 "애니메이션"으로 저장
+        contentGenre = '애니메이션'
+        console.log('[장르 저장] 애니메이션 장르 선택됨', { selectedGenre, contentGenre })
       } else if (genreMapForSave[selectedGenre]) {
-        // 영화 장르를 선택했고, 해당 장르 ID가 포함되어 있으면 저장
+        // 다른 장르를 선택했고, 해당 장르 ID가 포함되어 있으면 저장
         if (movie.genre_ids.includes(genreMapForSave[selectedGenre])) {
           contentGenre = selectedGenre
         } else {
@@ -641,21 +654,30 @@ export async function fetchAndSaveRecommendations(
       } else {
         // 저장 실패해도 TMDB 데이터를 임시 Content 객체로 변환
         // OTT 정보도 함께 가져오기 (장르에 따라)
-        // 중요: 선택한 장르가 TV 타입이면 무조건 TV로 처리
-        const isSelectedGenreTV = genre === '드라마' || genre === '예능' || genre === '애니메이션'
-        const isTVContent = isSelectedGenreTV 
-          ? true 
-          : (movie.genre_ids.includes(18) || 
-             movie.genre_ids.includes(16) || 
-             movie.genre_ids.includes(10770))
-        const contentType = isTVContent ? 'tv' : 'movie'
+        // 중요: 선택한 장르를 우선 확인
+        let contentType: 'movie' | 'tv' = 'movie'
+        if (genre === '영화') {
+          // 영화를 선택했으면 무조건 movie로 처리
+          contentType = 'movie'
+        } else if (genre === '애니메이션') {
+          // 애니메이션을 선택했으면 무조건 tv로 처리
+          contentType = 'tv'
+        } else {
+          // 장르 ID로 판단
+          const isTVContent = movie.genre_ids.includes(18) || 
+                              movie.genre_ids.includes(16) || 
+                              movie.genre_ids.includes(10770)
+          contentType = isTVContent ? 'tv' : 'movie'
+        }
         const ottProviders = await getWatchProvidersFromTMDB(movie.id, contentType)
         
         // 장르 목록 가져오기 (임시 콘텐츠용)
-        // 선택한 장르가 TV 타입이면 무조건 TV, 아니면 장르 ID로 판단
-        const genreType = isSelectedGenreTV 
-          ? 'tv' 
-          : (movie.genre_ids.some(id => id === 18 || id === 16 || id === 10770) ? 'tv' : 'movie')
+        // 선택한 장르를 우선 확인: "영화"면 movie, "애니메이션"이면 tv, 아니면 장르 ID로 판단
+        const genreType = genre === '영화'
+          ? 'movie'
+          : (genre === '애니메이션' 
+            ? 'tv' 
+            : (movie.genre_ids.some(id => id === 18 || id === 16 || id === 10770) ? 'tv' : 'movie'))
         const genreResponseTemp = await fetch(
           `${TMDB_BASE_URL}/genre/${genreType}/list?api_key=${TMDB_API_KEY}&language=ko-KR`
         )
@@ -696,8 +718,30 @@ export async function fetchAndSaveRecommendations(
       }
     }
 
-    // 저장된 콘텐츠가 있으면 반환, 없으면 임시 콘텐츠 반환
-    return savedContents.length > 0 ? savedContents : tempContents
+    // 저장된 콘텐츠와 임시 콘텐츠 합치기
+    const allContents = [...savedContents, ...tempContents]
+    
+    // 중복 제거 (같은 영화가 여러 번 반환되는 경우 방지)
+    // 중복 제거 키: imdb_id > (title + year) > id
+    const uniqueContentsMap = new Map<string, Content>()
+    for (const content of allContents) {
+      let key: string
+      if (content.imdb_id) {
+        key = `imdb_${content.imdb_id}`
+      } else if (content.title && content.year) {
+        key = `title_${content.title}_${content.year}`
+      } else {
+        key = `id_${content.id}`
+      }
+      // 이미 존재하는 경우 더 높은 평점을 가진 것을 유지
+      if (!uniqueContentsMap.has(key) || (content.imdb_rating || 0) > (uniqueContentsMap.get(key)?.imdb_rating || 0)) {
+        uniqueContentsMap.set(key, content)
+      }
+    }
+    
+    // 저장된 콘텐츠가 있으면 우선 반환, 없으면 임시 콘텐츠 반환
+    const uniqueContents = Array.from(uniqueContentsMap.values())
+    return uniqueContents
   } catch (error) {
     console.error('추천 콘텐츠 가져오기 실패:', error)
     return []
