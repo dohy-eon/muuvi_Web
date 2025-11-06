@@ -23,11 +23,7 @@ export default function RecommendationLoading({
   profile,
   onboardingData,
 }: RecommendationLoadingProps) {
-  const currentTime = new Date().toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  
 
   // 프로필이 있으면 프로필 사용, 없으면 온보딩 데이터 사용
   const displayGenre = profile?.genre || onboardingData?.genre
@@ -42,7 +38,7 @@ export default function RecommendationLoading({
       {/* Title Text and Logo Container */}
       <div className="absolute top-[299px] left-[32px] right-[32px] flex items-start gap-4">
         {/* Title Text */}
-        <div className="text-black text-2xl font-semibold font-['Pretendard'] leading-tight">
+        <div className="text-black text-xl sm:text-2xl font-semibold font-['Pretendard'] leading-tight">
           마음에 쏙 드는
           <br />
           추천을
@@ -62,9 +58,6 @@ export default function RecommendationLoading({
           />
         </div>
       </div>
-
-      {/* Loading Shadow */}
-      <div className="w-32 h-2.5 left-[32px] top-[418px] absolute bg-gradient-to-r from-gray-200 to-gray-50 rounded-full blur-[6px]"></div>
 
       {/* Selection Info Card */}
       {(displayGenre || moodNames) && (

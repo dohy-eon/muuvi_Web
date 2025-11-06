@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useRecoilValue } from 'recoil'
+import { useNavigate } from 'react-router-dom'
+import { useRecoilValue, useSetRecoilState } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
@@ -25,12 +26,22 @@ const moodIdToKorean: Record<string, string> = {
 }
 
 export default function Main() {
+  const navigate = useNavigate()
+  const setOnboardingData = useSetRecoilState(onboardingDataState)
   const [recommendations, setRecommendations] = useState<Content[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
   const [reloadKey, setReloadKey] = useState(0)
   const [recommendEnabled, setRecommendEnabled] = useState(true)
+
+  // 온보딩으로 이동하는 함수
+  const handleRestart = () => {
+    // 온보딩 데이터 초기화
+    setOnboardingData(null)
+    // 온보딩 페이지로 이동
+    navigate('/onboarding')
+  }
 
   const loadRecommendations = useCallback(async () => {
       try {
@@ -110,28 +121,39 @@ export default function Main() {
         </div>
       )}
 
-      {/* Reload Button */}
-      <button
-        type="button"
-        aria-label="reload-recommendations"
-        className="size-8 left-[148px] top-[548px] absolute overflow-hidden flex items-center justify-center rounded-full bg-white/0"
-        onClick={() => setReloadKey((k) => k + 1)}
-      >
-        <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
-      </button>
-      {/* Recommend Toggle Button (Right) */}
-      <button
-        type="button"
-        aria-label="toggle-recommend"
-        className="size-8 left-[196px] top-[548px] absolute overflow-hidden flex items-center justify-center rounded-full bg-white/0"
-        onClick={() => setRecommendEnabled((v) => !v)}
-      >
-        <img
-          src={recommendEnabled ? RecommendActive : RecommendInactive}
-          alt="recommend-toggle"
-          className="w-[28px] h-[28px]"
-        />
-      </button>
+      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4">
+        {/* 다시하기 버튼 */}
+        <button
+          onClick={handleRestart}
+          className="px-4 py-2 bg-[#2e2c6a] text-white text-sm font-semibold rounded-lg hover:bg-[#3a3878] transition-colors whitespace-nowrap"
+        >
+          다시하기
+        </button>
+
+        {/* Reload Button */}
+        <button
+          type="button"
+          aria-label="reload-recommendations"
+          className="size-8 flex items-center justify-center rounded-full bg-white/0"
+          onClick={() => setReloadKey((k) => k + 1)}
+        >
+          <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
+        </button>
+
+        {/* Recommend Toggle Button */}
+        <button
+          type="button"
+          aria-label="toggle-recommend"
+          className="size-8 flex items-center justify-center rounded-full bg-white/0"
+          onClick={() => setRecommendEnabled((v) => !v)}
+        >
+          <img
+            src={recommendEnabled ? RecommendActive : RecommendInactive}
+            alt="recommend-toggle"
+            className="w-[28px] h-[28px]"
+          />
+        </button>
+      </div>
 
       {/* Recommendation Cards */}
       {recommendations.length === 0 ? (

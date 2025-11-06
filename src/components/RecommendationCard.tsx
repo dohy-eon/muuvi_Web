@@ -1,15 +1,10 @@
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
-import { useState } from 'react'
-import RecommendActive from '../assets/RecommendActive.svg'
-import RecommendInactive from '../assets/RecommendInactive.svg'
-import Reload from '../assets/reload.svg'
+ 
 
 interface RecommendationCardProps {
   content: Content
   index: number
-  onToggleRecommend?: (content: Content, recommended: boolean) => void
-  onReload?: () => void
 }
 
 // 무드 ID를 한글 이름으로 매핑
@@ -25,40 +20,27 @@ const moodIdToKorean: Record<string, string> = {
   '09': '미스테리',
 }
 
-// 무드 태그 색상 매핑
+// 무드 태그 색상 매핑 (피그마 스펙 근사치)
 const moodTagColors: Record<string, string> = {
-  '01': 'bg-red-200', // 로맨스
-  '02': 'bg-gray-800', // 호러
-  '03': 'bg-yellow-300', // 코미디
-  '04': 'bg-cyan-900', // 공상 과학
-  '05': 'bg-purple-500', // 판타지
-  '06': 'bg-orange-400', // 어드벤처
-  '07': 'bg-red-600', // 액션
-  '08': 'bg-green-300', // 힐링
-  '09': 'bg-gray-500', // 미스테리
+  '01': 'bg-[#ffbdbd]', // 로맨스
+  '02': 'bg-[#2c2c2c]', // 호러
+  '03': 'bg-[#ffd93d]', // 코미디
+  '04': 'bg-[#003f5c]', // 공상 과학
+  '05': 'bg-[#9b59b6]', // 판타지
+  '06': 'bg-[#ff8c42]', // 어드벤처
+  '07': 'bg-[#e74c3c]', // 액션
+  '08': 'bg-[#8fd19e]', // 힐링
+  '09': 'bg-[#7f8c8d]', // 미스테리
 }
 
-export default function RecommendationCard({ content, index, onToggleRecommend, onReload }: RecommendationCardProps) {
+export default function RecommendationCard({ content, index }: RecommendationCardProps) {
   const navigate = useNavigate()
-  const [recommended, setRecommended] = useState(false)
   
-  // 태그를 무드 한글로 변환 (임시로 tags 배열의 첫 번째 요소 사용)
-  // 실제로는 Content 타입에 moods 필드가 추가되어야 함
-  const getMoodTags = () => {
-    // tags에서 무드 관련 태그 추출 (임시 구현)
-    if (content.tags && content.tags.length > 0) {
-      return content.tags.slice(0, 2).map((tag) => {
-        // 태그를 무드 ID로 매핑 (실제로는 더 정확한 매핑 필요)
-        const moodId = Object.entries(moodIdToKorean).find(
-          ([_, korean]) => korean === tag
-        )?.[0]
-        return moodId || '01' // 기본값
-      })
-    }
-    return ['01', '03'] // 기본 태그 (로맨스, 코미디)
-  }
-
-  const moodIds = getMoodTags()
+  
+  // 실제 무드 데이터 사용 (최대 2개)
+  const moodIds = content.moods && content.moods.length > 0 
+    ? content.moods.slice(0, 2) 
+    : ['01', '03'] // 기본값 (로맨스, 코미디)
   
   // 카드 위치 계산 (좌우 배치)
   const isLeft = index % 2 === 0
@@ -70,24 +52,7 @@ export default function RecommendationCard({ content, index, onToggleRecommend, 
     }
   }
 
-  const handleRecommendClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setRecommended((prev) => {
-      const next = !prev
-      onToggleRecommend?.(content, next)
-      return next
-    })
-  }
-
-  const handleReloadClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (onReload) {
-      onReload()
-    } else {
-      // 기본 동작: 페이지 리로드 (임시)
-      location.reload()
-    }
-  }
+  
 
   return (
     <div
@@ -95,33 +60,67 @@ export default function RecommendationCard({ content, index, onToggleRecommend, 
       style={{ left: leftPosition, top: '128px' }}
       onClick={handleClick}
     >
-      {/* 그라데이션 배경 */}
-      <div className="w-full h-full bg-gradient-to-b from-black/0 to-black/90 absolute"></div>
-      
-      {/* 포스터 이미지 */}
+      {/* 배경 이미지 전체 + 그라데이션 오버레이 */}
+      {content.poster_url ? (
+        <img src={content.poster_url} alt={content.title} className="absolute inset-0 w-full h-full object-cover" />
+      ) : null}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/90" />
+
+      {/* 제목/정보 - 좌하단 정렬 */}
+      <div className="absolute left-8 bottom-20 text-left text-white">
+        <div className="text-base font-semibold font-pretendard">{content.title}</div>
+        <div className="mt-1 text-xs font-normal font-pretendard opacity-90">
+          {(content.genres?.[0] || '영화')} •{content.year || ''}
+        </div>
+      </div>
+
+      {/* 작은 포스터 썸네일 - 우하단 */}
       {content.poster_url && (
         <img
           src={content.poster_url}
-          alt={content.title}
-          className="absolute bottom-[68px] left-1/2 -translate-x-1/2 w-20 h-28 object-cover"
+          alt={`${content.title} poster`}
+          className="absolute right-4 bottom-4 w-[84px] h-[120px] object-cover rounded-[6px]"
         />
       )}
-      
-      {/* 제목 */}
-      <div className="absolute bottom-[120px] left-1/2 -translate-x-1/2 text-center text-white text-base font-semibold font-pretendard">
-        {content.title}
-      </div>
-      
-      {/* 정보 (영화 •년도) */}
-      <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 text-center text-white text-xs font-normal font-pretendard">
-        {content.genres?.[0] || '영화'} •{content.year || ''}
-      </div>
-      
-      {/* 태그들 */}
-      <div className="absolute bottom-[32px] left-1/2 -translate-x-1/2 flex gap-2">
+
+      {/* OTT 제공자 로고들 - 무드 태그 위 (블로그 참고: 최대 6개, 이미지 onerror 처리) */}
+      {content.ott_providers && content.ott_providers.length > 0 && (
+        <div className="absolute left-8 bottom-[44px] flex gap-1.5">
+          {content.ott_providers.slice(0, 6).map((provider, index) => (
+            <div
+              key={provider.provider_id || index}
+              className="w-6 h-6 rounded overflow-hidden bg-white/20 backdrop-blur-sm flex items-center justify-center"
+            >
+              {provider.logo_path ? (
+                <img
+                  src={provider.logo_path}
+                  alt={provider.provider_name}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    // 이미지 로드 실패 시 대체 처리
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                    const parent = target.parentElement
+                    if (parent) {
+                      parent.innerHTML = `<span class="text-[8px] text-white font-medium truncate px-0.5">${provider.provider_name}</span>`
+                    }
+                  }}
+                />
+              ) : (
+                <span className="text-[8px] text-white font-medium truncate px-0.5">
+                  {provider.provider_name}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 태그들 - 좌하단 */}
+      <div className="absolute left-8 bottom-4 flex gap-2">
         {moodIds.map((moodId, tagIndex) => {
           const tagText = moodIdToKorean[moodId] || '로맨스'
-          const tagColor = moodTagColors[moodId] || 'bg-red-200'
+          const tagColor = moodTagColors[moodId] || 'bg-[#ffbdbd]'
 
           return (
             <div

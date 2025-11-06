@@ -3,6 +3,111 @@ import { moodsToImdbTags } from '../moodMapping'
 import { fetchAndSaveRecommendations } from '../imdb/fetchContent'
 import type { Content, Profile } from '../../types'
 
+// OTT 정보를 동적으로 가져오는 헬퍼 함수 (내부 함수로 import)
+// TMDB API를 사용하여 OTT 정보 가져오기
+async function enrichContentWithOTT(content: Content): Promise<Content> {
+  // 이미 OTT 정보가 있으면 그대로 반환
+  if (content.ott_providers && content.ott_providers.length > 0) {
+    return content
+  }
+
+  try {
+    const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
+    const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+    
+    let tmdbId: number | null = null
+    let contentType: 'movie' | 'tv' = 'movie'
+    
+    // 방법 1: imdb_id가 있으면 IMDB ID로 TMDB ID 찾기
+    if (content.imdb_id) {
+      const findResponse = await fetch(
+        `${TMDB_BASE_URL}/find/${content.imdb_id}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
+      )
+      
+      if (findResponse.ok) {
+        const findData = await findResponse.json()
+        const tmdbMovie = findData.movie_results?.[0]
+        const tmdbTV = findData.tv_results?.[0]
+        
+        if (tmdbMovie) {
+          tmdbId = tmdbMovie.id
+          contentType = 'movie'
+        } else if (tmdbTV) {
+          tmdbId = tmdbTV.id
+          contentType = 'tv'
+        }
+      }
+    }
+    
+    // 방법 2: imdb_id가 없으면 제목으로 검색
+    if (!tmdbId && content.title) {
+      const searchResponse = await fetch(
+        `${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&language=ko-KR&query=${encodeURIComponent(content.title)}&year=${content.year || ''}`
+      )
+      
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json()
+        const result = searchData.results?.[0]
+        
+        if (result) {
+          tmdbId = result.id
+          contentType = result.media_type === 'tv' ? 'tv' : 'movie'
+        }
+      }
+    }
+    
+    if (!tmdbId) {
+      return content
+    }
+
+    // TMDB ID로 OTT 정보 가져오기
+    const endpoint =
+      contentType === 'tv'
+        ? `${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers`
+        : `${TMDB_BASE_URL}/movie/${tmdbId}/watch/providers`
+    
+    let ottResponse = await fetch(`${endpoint}?api_key=${TMDB_API_KEY}`)
+    
+    // movie가 실패하면 tv로 시도 (타입이 잘못되었을 수 있음)
+    if (!ottResponse.ok && contentType === 'movie') {
+      ottResponse = await fetch(
+        `${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`
+      )
+      if (ottResponse.ok) {
+        contentType = 'tv'
+      }
+    }
+
+    if (!ottResponse.ok) {
+      return content
+    }
+
+    const ottData = await ottResponse.json()
+    const krProviders = ottData.results?.KR
+
+    if (!krProviders || !krProviders.flatrate) {
+      return content
+    }
+
+    // OTT 정보 추가 (블로그 참고: w300 사용)
+    const ottProviders = krProviders.flatrate.map((provider: any) => ({
+      provider_id: provider.provider_id,
+      provider_name: provider.provider_name,
+      logo_path: provider.logo_path
+        ? `https://image.tmdb.org/t/p/w300${provider.logo_path}`
+        : undefined,
+    }))
+
+    return {
+      ...content,
+      ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
+    }
+  } catch (error) {
+    console.warn('OTT 정보 가져오기 실패:', error)
+    return content
+  }
+}
+
 /**
  * 사용자 프로필 기반 추천 콘텐츠 가져오기
  */
@@ -21,8 +126,11 @@ export async function getRecommendations(
     // 무드 태그 필터링
     if (profile.moods && profile.moods.length > 0) {
       const imdbTags = moodsToImdbTags(profile.moods)
-      // tags 배열과 겹치는 항목이 있는지 확인
+      // tags 배열과 겹치는 항목이 있는지 확인 (OR 조건 - 하나라도 매칭되면 포함)
       query = query.overlaps('tags', imdbTags)
+      
+      // 또는 moods 필드가 있으면 직접 매칭 (더 정확한 필터링)
+      // query = query.or(`moods.cs.{${profile.moods.join(',')}}},tags.ov.{${imdbTags.join(',')}}`)
     }
 
     const { data: existingContents, error: queryError } = await query
@@ -47,7 +155,12 @@ export async function getRecommendations(
         .sort((a, b) => (b.imdb_rating || 0) - (a.imdb_rating || 0))
         .slice(0, 3)
 
-      return uniqueContents
+      // OTT 정보가 없는 콘텐츠에 대해 동적으로 가져오기
+      const enrichedContents = await Promise.all(
+        uniqueContents.map((content) => enrichContentWithOTT(content))
+      )
+
+      return enrichedContents
     }
 
     if (queryError) {
@@ -55,8 +168,15 @@ export async function getRecommendations(
       return []
     }
 
-    // 3. 상위 3개 반환
-    return (existingContents || []).slice(0, 3)
+    // 3. 상위 3개 반환하고 OTT 정보 추가
+    const topContents = (existingContents || []).slice(0, 3)
+    
+    // OTT 정보가 없는 콘텐츠에 대해 동적으로 가져오기 (병렬 처리)
+    const enrichedContents = await Promise.all(
+      topContents.map((content) => enrichContentWithOTT(content))
+    )
+    
+    return enrichedContents
   } catch (error) {
     console.error('추천 콘텐츠 조회 중 오류:', error)
     return []
