@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 
 interface RecommendationCardProps {
   content: Content
-  index: number
   selectedMoods?: string[] // 선택한 무드 ID 배열 (최대 2개)
 }
 
@@ -34,7 +33,7 @@ const moodTagColors: Record<string, string> = {
   '09': 'bg-[#7f8c8d]', // 미스테리
 }
 
-export default function RecommendationCard({ content, index, selectedMoods }: RecommendationCardProps) {
+export default function RecommendationCard({ content, selectedMoods }: RecommendationCardProps) {
   const navigate = useNavigate()
   
   // 실제 무드 데이터 사용 (최대 2개)
@@ -44,10 +43,6 @@ export default function RecommendationCard({ content, index, selectedMoods }: Re
     : (selectedMoods && selectedMoods.length > 0 
       ? selectedMoods.slice(0, 2) 
       : []) // 무드가 없으면 태그를 표시하지 않음
-  
-  // 카드 위치 계산 (좌우 배치)
-  const isLeft = index % 2 === 0
-  const leftPosition = isLeft ? '48px' : '417px'
 
   const handleClick = () => {
     if (content.id) {
@@ -55,12 +50,9 @@ export default function RecommendationCard({ content, index, selectedMoods }: Re
     }
   }
 
-  
-
   return (
     <div
-      className="w-72 h-96 absolute rounded-[20px] overflow-hidden cursor-pointer"
-      style={{ left: leftPosition, top: '128px' }}
+      className="w-72 h-96 relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0"
       onClick={handleClick}
     >
       {/* 배경 이미지 전체 + 그라데이션 오버레이 */}

@@ -34,6 +34,8 @@ export default function Main() {
   const onboardingData = useRecoilValue(onboardingDataState)
   const [reloadKey, setReloadKey] = useState(0)
   const [recommendEnabled, setRecommendEnabled] = useState(true)
+  // 현재 표시 중인 카드의 인덱스 상태
+  const [currentIndex, setCurrentIndex] = useState(0)
 
   // 온보딩으로 이동하는 함수
   const handleRestart = async () => {
@@ -79,6 +81,8 @@ export default function Main() {
           // 추천 콘텐츠 가져오기 (forceRefresh가 true이면 기존 내역 무시하고 새로 가져오기)
           const contents = await getRecommendations(profile, forceRefresh)
           setRecommendations(contents)
+          // 추천 로드 시 인덱스 초기화
+          setCurrentIndex(0)
         }
       } catch (error) {
         console.error('추천 콘텐츠 로드 실패:', error)
@@ -104,7 +108,18 @@ export default function Main() {
     .map((id) => moodIdToKorean[id] || id)
     .join(', ')
 
-  
+  // 다음/이전 핸들러
+  const handleNext = () => {
+    if (currentIndex < recommendations.length - 1) {
+      setCurrentIndex((prev) => prev + 1)
+    }
+  }
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1)
+    }
+  }
 
   return (
     <div className="w-full h-[812px] relative bg-white overflow-hidden font-pretendard">
@@ -172,20 +187,63 @@ export default function Main() {
         </button>
       </div>
 
-      {/* Recommendation Cards */}
+      {/* 카드 네비게이션 버튼 */}
+      {recommendations.length > 0 && (
+        <div className="absolute top-[320px] w-full flex justify-between px-2 z-20 pointer-events-none">
+          {/* 이전 버튼 */}
+          <button
+            onClick={handlePrev}
+            aria-label="previous content"
+            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
+              currentIndex === 0 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
+            }`}
+            disabled={currentIndex === 0}
+          >
+            &lt;
+          </button>
+          {/* 다음 버튼 */}
+          <button
+            onClick={handleNext}
+            aria-label="next content"
+            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
+              currentIndex >= recommendations.length - 1 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
+            }`}
+            disabled={currentIndex >= recommendations.length - 1}
+          >
+            &gt;
+          </button>
+        </div>
+      )}
+
+      {/* Recommendation Cards -> Slider Container */}
       {recommendations.length === 0 ? (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
           추천 콘텐츠가 없습니다.
         </div>
       ) : (
-        recommendations.slice(0, 2).map((content, index) => (
-          <RecommendationCard 
-            key={content.id} 
-            content={content} 
-            index={index} 
-            selectedMoods={displayMoods}
-          />
-        ))
+        // 슬라이더의 보이는 영역 (Viewport)
+        <div className="absolute top-[128px] w-full overflow-hidden z-10">
+          {/* 슬라이더 트랙 (모든 카드를 담음) */}
+          <div
+            className="flex gap-2"
+            style={{
+              // transform과 transition으로 슬라이드 구현
+              // w-72 (18rem) + gap-2 (0.5rem) = 18.5rem (296px)
+              // 50% (중앙) - 9rem (카드 절반) = 카드 1개 중앙 정렬
+              transform: `translateX(calc(50% - 9rem - ${currentIndex * 18.5}rem))`,
+              transition: 'transform 0.4s ease-in-out',
+            }}
+          >
+            {/* 모든 추천 카드를 렌더링 */}
+            {recommendations.map((content) => (
+              <RecommendationCard 
+                key={content.id} 
+                content={content} 
+                selectedMoods={displayMoods}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
