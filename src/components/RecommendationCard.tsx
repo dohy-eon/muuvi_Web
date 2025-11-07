@@ -4,45 +4,49 @@ import { useNavigate } from 'react-router-dom'
 
 interface RecommendationCardProps {
   content: Content
-  selectedMoods?: string[] // 선택한 무드 ID 배열 (최대 2개)
 }
 
-// 무드 ID를 한글 이름으로 매핑
-const moodIdToKorean: Record<string, string> = {
-  '01': '로맨스',
-  '02': '호러',
-  '03': '코미디',
-  '04': '공상 과학',
-  '05': '판타지',
-  '06': '어드벤처',
-  '07': '액션',
-  '08': '힐링',
-  '09': '미스테리',
+// 장르/태그 색상 매핑 (실제 장르 기반)
+const genreTagColors: Record<string, string> = {
+  // 한글 장르
+  '로맨스': 'bg-[#ffbdbd]',
+  '공포': 'bg-[#2c2c2c]',
+  '호러': 'bg-[#2c2c2c]',
+  '코미디': 'bg-[#ffd93d]',
+  '공상과학': 'bg-[#003f5c]',
+  'SF': 'bg-[#003f5c]',
+  '판타지': 'bg-[#9b59b6]',
+  '모험': 'bg-[#ff8c42]',
+  '어드벤처': 'bg-[#ff8c42]',
+  '액션': 'bg-[#e74c3c]',
+  '드라마': 'bg-[#8fd19e]',
+  '가족': 'bg-[#8fd19e]',
+  '미스테리': 'bg-[#7f8c8d]',
+  '스릴러': 'bg-[#7f8c8d]',
+  // 영문 장르
+  'Romance': 'bg-[#ffbdbd]',
+  'Horror': 'bg-[#2c2c2c]',
+  'Comedy': 'bg-[#ffd93d]',
+  'Science Fiction': 'bg-[#003f5c]',
+  'Fantasy': 'bg-[#9b59b6]',
+  'Adventure': 'bg-[#ff8c42]',
+  'Action': 'bg-[#e74c3c]',
+  'Drama': 'bg-[#8fd19e]',
+  'Family': 'bg-[#8fd19e]',
+  'Mystery': 'bg-[#7f8c8d]',
+  'Thriller': 'bg-[#7f8c8d]',
+  // 기본 색상
+  'default': 'bg-[#9b59b6]',
 }
 
-// 무드 태그 색상 매핑 (피그마 스펙 근사치)
-const moodTagColors: Record<string, string> = {
-  '01': 'bg-[#ffbdbd]', // 로맨스
-  '02': 'bg-[#2c2c2c]', // 호러
-  '03': 'bg-[#ffd93d]', // 코미디
-  '04': 'bg-[#003f5c]', // 공상 과학
-  '05': 'bg-[#9b59b6]', // 판타지
-  '06': 'bg-[#ff8c42]', // 어드벤처
-  '07': 'bg-[#e74c3c]', // 액션
-  '08': 'bg-[#8fd19e]', // 힐링
-  '09': 'bg-[#7f8c8d]', // 미스테리
-}
-
-export default function RecommendationCard({ content, selectedMoods }: RecommendationCardProps) {
+export default function RecommendationCard({ content }: RecommendationCardProps) {
   const navigate = useNavigate()
   
-  // 실제 무드 데이터 사용 (최대 2개)
-  // 우선순위: 1. content.moods (콘텐츠에 저장된 무드) 2. selectedMoods (사용자가 선택한 무드)
-  const moodIds = content.moods && content.moods.length > 0 
-    ? content.moods.slice(0, 2) 
-    : (selectedMoods && selectedMoods.length > 0 
-      ? selectedMoods.slice(0, 2) 
-      : []) // 무드가 없으면 태그를 표시하지 않음
+  // 실제 장르 태그 사용 (최대 2개)
+  // content.tags에서 실제 TMDB 장르를 가져옴 (예: "Horror", "Thriller", "공포", "스릴러")
+  const genreTags = content.tags && content.tags.length > 0 
+    ? content.tags.slice(0, 2) 
+    : [] // 태그가 없으면 표시하지 않음
 
   const handleClick = () => {
     if (content.id) {
@@ -111,20 +115,19 @@ export default function RecommendationCard({ content, selectedMoods }: Recommend
         </div>
       )}
 
-      {/* 태그들 - 좌하단 (무드가 있을 때만 표시) */}
-      {moodIds.length > 0 && (
+      {/* 태그들 - 좌하단 (실제 장르 태그만 표시) */}
+      {genreTags.length > 0 && (
         <div className="absolute left-8 bottom-4 flex gap-2">
-          {moodIds.map((moodId, tagIndex) => {
-            const tagText = moodIdToKorean[moodId] || '로맨스'
-            const tagColor = moodTagColors[moodId] || 'bg-[#ffbdbd]'
+          {genreTags.map((tag, tagIndex) => {
+            const tagColor = genreTagColors[tag] || genreTagColors['default']
 
             return (
               <div
                 key={tagIndex}
-                className={`w-10 h-5 ${tagColor} rounded-md overflow-hidden flex items-center justify-center`}
+                className={`px-2 h-5 ${tagColor} rounded-md overflow-hidden flex items-center justify-center`}
               >
-                <div className="text-center text-white text-[10px] font-normal font-pretendard">
-                  {tagText}
+                <div className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap">
+                  {tag}
                 </div>
               </div>
             )
