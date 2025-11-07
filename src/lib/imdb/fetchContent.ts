@@ -594,14 +594,14 @@ async function saveContentToSupabase(
       genre: contentGenre, // 실제 장르로 저장
       tags: allTags, // 한국어 장르 + 영어 태그 (무드 필터링용)
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
+
+      ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
       // 추가 정보 (필요시 사용)
       // original_title: originalTitle,
       // original_language: movie.original_language,
       // production_country: productionCountry,
       // vote_count: movie.vote_count,
       // popularity: movie.popularity,
-      // ott_providers는 Supabase 테이블에 컬럼이 없으면 제외
-      // 필요시 Supabase 테이블에 ott_providers JSONB 컬럼을 추가하세요
     }
 
     // Supabase에 저장
