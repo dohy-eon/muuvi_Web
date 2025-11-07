@@ -6,15 +6,56 @@ class EmbeddingPipeline {
   static task = 'feature-extraction'
   static model = 'Xenova/all-MiniLM-L6-v2'
   static instance: any = null
+  static loading: boolean = false
+  static loadError: any = null
 
-  static async getInstance() {
-    if (this.instance === null) {
+  static async getInstance(timeout: number = 50000) {
+    // 이미 로드 실패한 경우
+    if (this.loadError) {
+      throw this.loadError
+    }
+
+    // 이미 로드된 경우
+    if (this.instance !== null) {
+      return this.instance
+    }
+
+    // 로딩 중인 경우 대기
+    if (this.loading) {
+      console.log('[모델] 로딩 중... 대기')
+      // 최대 60초 대기
+      for (let i = 0; i < 60; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        if (this.instance !== null) return this.instance
+        if (this.loadError) throw this.loadError
+      }
+      throw new Error('Model loading timeout')
+    }
+
+    // 새로 로드
+    this.loading = true
+    try {
+      console.log('[모델] 로드 시작')
       // Supabase 엣지 환경에 맞게 설정
       env.allowLocalModels = false
       env.useBrowserCache = false
-      this.instance = await pipeline(this.task, this.model)
+      
+      // 타임아웃과 함께 로드
+      const loadPromise = pipeline(this.task, this.model)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Model load timeout')), timeout)
+      )
+      
+      this.instance = await Promise.race([loadPromise, timeoutPromise])
+      console.log('[모델] 로드 완료')
+      return this.instance
+    } catch (error) {
+      console.error('[모델] 로드 실패:', error)
+      this.loadError = error
+      throw error
+    } finally {
+      this.loading = false
     }
-    return this.instance
   }
 }
 

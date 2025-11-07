@@ -27,43 +27,90 @@ export async function getRecommendations(
     // 1. 사용자의 선택을 AI가 이해할 수 있는 "검색 텍스트"로 변환
     const moodNames = profile.moods.map(id => moodIdToKorean[id] || '').join(' ')
     const queryText = `${moodNames} ${profile.genre}` // 예: "힐링 로맨스 드라마"
-
-    // 2. 검색 텍스트를 "검색 벡터"로 변환
-    const { data: embedData, error: embedError } = await supabase.functions.invoke(
-      'embed',
-      { body: { text: queryText } }
-    )
-    if (embedError) throw embedError
-    const query_vector = embedData.vector
-
-    // 3. 1차 필터링에 사용할 태그 준비 (선택 사항이지만 정확도 향상에 도움)
     const p_mood_tags = moodsToImdbTags(profile.moods)
-    
-    // 4. [수정] DB의 'match_contents' 함수(RPC)를 호출
-    const { data, error } = await supabase.rpc('match_contents', {
-      query_vector: query_vector, // AI 검색 벡터
-      match_count: 5,             // 5개 결과 요청
-      p_genre: profile.genre,     // 1차 필터: 장르
-      p_mood_tags: p_mood_tags    // 1차 필터: 태그
-    })
 
-    if (error) {
-      console.error('벡터 검색(RPC) 실패:', error)
-      return []
+    // 2. AI 벡터 검색 시도
+    try {
+      console.log(`[AI 추천 시도] "${queryText}"`)
+      
+      // 검색 텍스트를 "검색 벡터"로 변환
+      const { data: embedData, error: embedError } = await supabase.functions.invoke(
+        'embed',
+        { body: { text: queryText } }
+      )
+      
+      if (embedError) {
+        console.warn('[임베딩 실패] 태그 검색으로 폴백:', embedError.message)
+        throw embedError
+      }
+      
+      const query_vector = embedData.vector
+      
+      // DB의 'match_contents' 함수(RPC)를 호출
+      const { data, error } = await supabase.rpc('match_contents', {
+        query_vector: query_vector,
+        match_count: 5,
+        p_genre: profile.genre,
+        p_mood_tags: p_mood_tags
+      })
+
+      if (error) {
+        console.warn('[벡터 검색 실패] 태그 검색으로 폴백:', error.message)
+        throw error
+      }
+      
+      // OTT 제공자가 있는 콘텐츠만 필터링
+      const contentsWithOTT = (data || []).filter(
+        (content: Content) => content.ott_providers && content.ott_providers.length > 0
+      )
+
+      if (contentsWithOTT.length > 0) {
+        console.log(`[AI 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
+        return contentsWithOTT.slice(0, 3)
+      }
+      
+      console.log('[AI 추천 결과 없음] 태그 검색으로 폴백')
+      throw new Error('No AI results')
+      
+    } catch (aiError) {
+      // 3. AI 검색 실패 시 태그 기반 검색으로 폴백
+      console.log(`[태그 기반 검색] "${queryText}"`)
+      
+      let query = supabase.from('contents').select('*')
+      
+      // OTT 필터
+      query = query.not('ott_providers', 'is', null)
+      
+      // 장르 필터
+      if (profile.genre) {
+        query = query.eq('genre', profile.genre)
+      }
+      
+      // 무드 태그 필터
+      if (p_mood_tags.length > 0) {
+        query = query.overlaps('tags', p_mood_tags)
+      }
+      
+      const { data: tagData, error: tagError } = await query
+        .order('imdb_rating', { ascending: false, nullsFirst: false })
+        .limit(20)
+      
+      if (tagError) {
+        console.error('[태그 검색 실패]:', tagError)
+        return []
+      }
+      
+      // OTT 필터링
+      const contentsWithOTT = (tagData || []).filter(
+        (content: Content) => content.ott_providers && content.ott_providers.length > 0
+      )
+      
+      console.log(`[태그 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
+      return contentsWithOTT.slice(0, 3)
     }
     
-    // 5. OTT 제공자가 실제로 있는 콘텐츠만 필터링
-    const contentsWithOTT = (data || []).filter(
-      (content: Content) => content.ott_providers && content.ott_providers.length > 0
-    )
-
-    console.log(`[AI 추천] "${queryText}" => ${contentsWithOTT.length}개 반환`)
-
-    // 6. 상위 3개 반환
-    return contentsWithOTT.slice(0, 3)
-    
   } catch (error) {
-    console.error('AI 추천 조회 중 오류:', error)
+    console.error('추천 조회 실패:', error)
     return []
   }
 }
