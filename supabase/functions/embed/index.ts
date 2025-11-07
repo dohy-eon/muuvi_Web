@@ -19,6 +19,17 @@ class EmbeddingPipeline {
 }
 
 serve(async (req) => {
+  // CORS 헤더 설정
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
+
+  // OPTIONS 요청 처리 (Preflight)
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   try {
     const { text } = await req.json()
     
@@ -26,7 +37,10 @@ serve(async (req) => {
     if (!text) {
       return new Response(
         JSON.stringify({ error: 'Missing "text" property in request body' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       )
     }
 
@@ -51,7 +65,7 @@ serve(async (req) => {
     console.log(`[임베딩 성공] 벡터 크기: ${vector.length}`)
 
     return new Response(JSON.stringify({ vector }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
     console.error('[임베딩 에러]', error)
@@ -64,7 +78,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
   }
