@@ -313,8 +313,33 @@ async function fetchMoviesFromTMDB(
         장르: genre,
       })
     }
+    
+    // [최적화] 결과가 부족하면 여러 페이지 검색
+    let allResults = data.results || []
+    let currentPage = 1
+    const maxPages = 3 // 최대 3페이지까지 검색
+    
+    while (allResults.length < limit && currentPage < maxPages && data.total_pages > currentPage) {
+      currentPage++
+      params.set('page', currentPage.toString())
+      
+      console.log(`[추가 페이지 검색] page ${currentPage} (현재: ${allResults.length}/${limit}개)`)
+      
+      const nextResponse = await fetch(`${TMDB_BASE_URL}/${endpoint}?${params.toString()}`)
+      if (nextResponse.ok) {
+        const nextData = await nextResponse.json()
+        if (nextData.results && nextData.results.length > 0) {
+          allResults = [...allResults, ...nextData.results]
+          console.log(`[페이지 ${currentPage} 추가] 총 ${allResults.length}개`)
+        } else {
+          break
+        }
+      } else {
+        break
+      }
+    }
      
-    return data.results.slice(0, limit) || []
+    return allResults.slice(0, limit) || []
   } catch (error) {
     console.error('TMDB 데이터 가져오기 실패:', error)
     return []
