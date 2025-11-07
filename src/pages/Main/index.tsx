@@ -238,8 +238,7 @@ export default function Main() {
             {recommendations.map((content) => (
               <RecommendationCard 
                 key={content.id} 
-                content={content} 
-                selectedMoods={displayMoods}
+                content={content}
               />
             ))}
           </div>
