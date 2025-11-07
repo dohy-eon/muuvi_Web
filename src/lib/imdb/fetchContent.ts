@@ -544,30 +544,166 @@ async function saveContentToSupabase(
       return null;
     }
 
+    // [추가] 임베딩 생성 (줄거리를 벡터로 변환)
+    const textToEmbed = movie.overview || movie.title || movie.name || '';
+    let embedding: number[] | null = null;
+
+    if (textToEmbed) {
+      try {
+        // 텍스트 길이 제한 (512자) - embed 함수와 동일
+        const truncatedText = textToEmbed.slice(0, 512);
+        
+        const { data: embedData, error: embedError } = await supabase.functions.invoke(
+          'embed',
+          { body: { text: truncatedText } }
+        );
+        
+        if (embedError) {
+          console.error(`[임베딩 에러] (ID: ${movie.id}):`, embedError);
+          throw embedError;
+        }
+        
+        if (!embedData || !embedData.vector) {
+          console.warn(`[임베딩 응답 없음] (ID: ${movie.id})`);
+        } else {
+          embedding = embedData.vector;
+          const vectorSize = Array.isArray(embedding) ? embedding.length : 0;
+          console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${vectorSize})`);
+        }
+      } catch (e: any) {
+        console.error(`[임베딩 실패] (ID: ${movie.id}, 제목: ${movie.title || movie.name}):`, e.message || e);
+        // 임베딩 실패해도 콘텐츠는 저장 (vector는 null)
+        embedding = null;
+      }
+    }
+
     // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
     const genres = movie.genre_ids.map((id) => genreMapKo[id] || '').filter(Boolean);
     const englishTags = movie.genre_ids.map((id) => genreMapEn[id] || '').filter(Boolean);
-    const allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
+    let allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
 
-    // [기존 로직] 저장할 장르명 결정
+    // [추가] 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
+    allTags = allTags.flatMap(tag => 
+      tag.includes('&') 
+        ? tag.split('&').map(t => t.trim()).filter(Boolean)
+        : tag
+    );
+    
+    // [추가] 영문 태그를 한글로 번역
+    const tagTranslation: Record<string, string> = {
+      // 장르
+      'Action': '액션',
+      'Adventure': '모험',
+      'Animation': '애니메이션',
+      'Comedy': '코미디',
+      'Crime': '범죄',
+      'Documentary': '다큐멘터리',
+      'Drama': '드라마',
+      'Family': '가족',
+      'Fantasy': '판타지',
+      'History': '역사',
+      'Horror': '공포',
+      'Music': '음악',
+      'Mystery': '미스터리',
+      'Romance': '로맨스',
+      'Science Fiction': 'SF',
+      'Sci-Fi': 'SF',
+      'Thriller': '스릴러',
+      'War': '전쟁',
+      'Western': '서부',
+      'Reality': '리얼리티',
+      'Talk Show': '토크쇼',
+      'News': '뉴스',
+      // TV 타입
+      'TV Movie': 'TV영화',
+    };
+    
+    // 번역 적용
+    allTags = allTags.map(tag => tagTranslation[tag] || tag);
+    
+    // [추가] 중복 제거 (번역 후)
+    allTags = [...new Set(allTags)];
+
+    // [개선] 태그에서 장르 추론 및 정리
     const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID;
     let contentGenre = '영화'; // 기본값
     
+    // 장르 키워드 매핑 (태그에서 장르 추론용 - 이미 번역된 한글 태그)
+    const genreKeywords: Record<string, string[]> = {
+      '애니메이션': ['애니메이션'],
+      '드라마': ['드라마'],
+      '예능': ['리얼리티', '토크쇼'],
+    };
+    
+    // 태그에서 장르 감지
+    let detectedGenre: string | null = null;
+    for (const [genre, keywords] of Object.entries(genreKeywords)) {
+      if (keywords.some(keyword => allTags.includes(keyword))) {
+        detectedGenre = genre;
+        // 태그에서 장르 키워드 제거
+        allTags = allTags.filter(tag => !keywords.includes(tag));
+        break;
+      }
+    }
+    
+    // [추가] 태그가 비었을 경우 기본 태그 추가 (장르 기반)
+    if (allTags.length === 0) {
+      // selectedGenre 또는 감지된 장르를 기본 태그로 사용
+      const baseGenre = selectedGenre || detectedGenre || '영화';
+      
+      // 장르별 기본 태그 추가
+      if (baseGenre === '예능') {
+        allTags = ['코미디', '리얼리티'];
+      } else if (baseGenre === '애니메이션') {
+        allTags = ['애니메이션'];
+      } else if (baseGenre === '드라마') {
+        allTags = ['드라마'];
+      } else {
+        // 영화는 평점 기반 태그 추가
+        if (movie.vote_average >= 7) {
+          allTags = ['명작'];
+        } else {
+          allTags = ['영화'];
+        }
+      }
+      
+      console.log(`[기본 태그 추가] ${movie.title || movie.name}: ${allTags.join(', ')}`);
+    }
+    
+    // 장르 결정 (우선순위: selectedGenre > 태그에서 감지 > genre_ids로 판단)
     if (selectedGenre) {
       if (selectedGenre === '영화') {
         contentGenre = '영화';
+      } else if (selectedGenre === '예능') {
+        // 예능은 무조건 예능으로 저장 (TMDB에서 genre_id로 구분 안 됨)
+        contentGenre = '예능';
+      } else if (selectedGenre === '애니메이션') {
+        // 애니메이션도 무조건 애니메이션으로 저장
+        contentGenre = '애니메이션';
+      } else if (selectedGenre === '드라마') {
+        // 드라마도 무조건 드라마로 저장
+        contentGenre = '드라마';
       } else if (genreMapForSave[selectedGenre] && movie.genre_ids.includes(genreMapForSave[selectedGenre])) {
         contentGenre = selectedGenre;
+      } else if (detectedGenre) {
+        contentGenre = detectedGenre; // 태그에서 감지된 장르 사용
       } else {
-          // 선택한 장르가 콘텐츠에 없으면, 콘텐츠의 주 장르로 대체
-          if (movie.genre_ids.includes(18)) contentGenre = '드라마';
-          else if (movie.genre_ids.includes(16)) contentGenre = '애니메이션';
-          else if (movie.genre_ids.includes(10770)) contentGenre = '예능';
-      }
-    } else {
+        // 선택한 장르가 콘텐츠에 없으면, genre_ids로 판단
         if (movie.genre_ids.includes(18)) contentGenre = '드라마';
         else if (movie.genre_ids.includes(16)) contentGenre = '애니메이션';
         else if (movie.genre_ids.includes(10770)) contentGenre = '예능';
+      }
+    } else {
+      // selectedGenre가 없으면 태그 또는 genre_ids로 판단
+      if (detectedGenre) {
+        contentGenre = detectedGenre;
+      } else if (movie.genre_ids.includes(18)) {
+        contentGenre = '드라마';
+      } else if (movie.genre_ids.includes(16)) {
+        contentGenre = '애니메이션';
+      } else if (movie.genre_ids.includes(10770)) {
+        contentGenre = '예능';
+      }
     }
 
     const contentTitle = movie.title || movie.name || '';
@@ -592,6 +728,7 @@ async function saveContentToSupabase(
       tags: allTags,
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
       ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
+      vector: embedding, // 임베딩 벡터 추가 (null 가능)
     };
 
     // [최적화] 중복 저장 방지

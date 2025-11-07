@@ -26,6 +26,7 @@ export interface Content {
   moods?: string[] // 무드 ID 배열 (예: ['01', '03'])
   url?: string
   ott_providers?: OTTProvider[] // OTT 스트리밍 서비스 정보
+  vector?: number[] // 임베딩 벡터 (의미 기반 검색용)
   created_at?: string
 }
 
