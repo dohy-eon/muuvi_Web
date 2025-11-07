@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { pipeline, env } from 'https://esm.sh/@xenova/transformers'
+import { pipeline, env } from '@xenova/transformers'
 
 // AI 모델은 싱글톤(한 번만 로드)으로 관리
 class EmbeddingPipeline {
@@ -63,6 +63,7 @@ serve(async (req) => {
   // CORS 헤더 설정
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   }
 
