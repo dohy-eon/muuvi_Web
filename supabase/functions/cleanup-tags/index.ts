@@ -87,7 +87,24 @@ serve(async (req) => {
           }
         }
         
-        // 2-5. 업데이트
+        // 2-5. 태그가 비었으면 기본 태그 추가
+        if (cleanedTags.length === 0) {
+          const baseGenre = detectedGenre || content.genre || '영화'
+          
+          if (baseGenre === '예능') {
+            cleanedTags = ['코미디', '리얼리티']
+          } else if (baseGenre === '애니메이션') {
+            cleanedTags = ['애니메이션']
+          } else if (baseGenre === '드라마') {
+            cleanedTags = ['드라마']
+          } else {
+            cleanedTags = ['영화']
+          }
+          
+          console.log(`[기본 태그 추가] ${content.title}: ${cleanedTags.join(', ')}`)
+        }
+        
+        // 2-6. 업데이트
         const updateData: any = {
           tags: cleanedTags
         }

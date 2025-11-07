@@ -646,10 +646,43 @@ async function saveContentToSupabase(
       }
     }
     
+    // [추가] 태그가 비었을 경우 기본 태그 추가 (장르 기반)
+    if (allTags.length === 0) {
+      // selectedGenre 또는 감지된 장르를 기본 태그로 사용
+      const baseGenre = selectedGenre || detectedGenre || '영화';
+      
+      // 장르별 기본 태그 추가
+      if (baseGenre === '예능') {
+        allTags = ['코미디', '리얼리티'];
+      } else if (baseGenre === '애니메이션') {
+        allTags = ['애니메이션'];
+      } else if (baseGenre === '드라마') {
+        allTags = ['드라마'];
+      } else {
+        // 영화는 평점 기반 태그 추가
+        if (movie.vote_average >= 7) {
+          allTags = ['명작'];
+        } else {
+          allTags = ['영화'];
+        }
+      }
+      
+      console.log(`[기본 태그 추가] ${movie.title || movie.name}: ${allTags.join(', ')}`);
+    }
+    
     // 장르 결정 (우선순위: selectedGenre > 태그에서 감지 > genre_ids로 판단)
     if (selectedGenre) {
       if (selectedGenre === '영화') {
         contentGenre = '영화';
+      } else if (selectedGenre === '예능') {
+        // 예능은 무조건 예능으로 저장 (TMDB에서 genre_id로 구분 안 됨)
+        contentGenre = '예능';
+      } else if (selectedGenre === '애니메이션') {
+        // 애니메이션도 무조건 애니메이션으로 저장
+        contentGenre = '애니메이션';
+      } else if (selectedGenre === '드라마') {
+        // 드라마도 무조건 드라마로 저장
+        contentGenre = '드라마';
       } else if (genreMapForSave[selectedGenre] && movie.genre_ids.includes(genreMapForSave[selectedGenre])) {
         contentGenre = selectedGenre;
       } else if (detectedGenre) {
