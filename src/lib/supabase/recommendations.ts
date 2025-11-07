@@ -1,58 +1,69 @@
 import { supabase } from '../supabase.ts'
-import { moodsToImdbTags } from '../moodMapping.ts'
+import { moodsToImdbTags } from '../moodMapping.ts' // 1차 필터링을 위해 유지
 import type { Content, Profile } from '../../types/index.ts'
 
+// [추가] 무드 ID를 한글로 변환 (검색어 생성용)
+const moodIdToKorean: Record<string, string> = {
+  '01': '로맨스',
+  '02': '호러',
+  '03': '코미디',
+  '04': '공상 과학',
+  '05': '판타지',
+  '06': '어드벤처',
+  '07': '액션',
+  '08': '힐링',
+  '09': '미스테리',
+}
+
 /**
- * 사용자 프로필 기반 추천 콘텐츠 가져오기
+ * 사용자 프로필 기반 AI 벡터 검색 추천
  * @param profile 사용자 프로필
  */
 export async function getRecommendations(
   profile: Profile,
-  _forceRefresh: boolean = false // 이 파라미터는 더 이상 사용되지 않습니다.
+  _forceRefresh: boolean = false
 ): Promise<Content[]> {
   try {
-    // 1. Supabase에 저장된 콘텐츠만 조회
-    let query = supabase.from('contents').select('*')
+    // 1. 사용자의 선택을 AI가 이해할 수 있는 "검색 텍스트"로 변환
+    const moodNames = profile.moods.map(id => moodIdToKorean[id] || '').join(' ')
+    const queryText = `${moodNames} ${profile.genre}` // 예: "힐링 로맨스 드라마"
 
-    // 2. OTT 제공자가 있는 콘텐츠만 필터링 (시청 가능한 콘텐츠만)
-    query = query.not('ott_providers', 'is', null)
+    // 2. 검색 텍스트를 "검색 벡터"로 변환
+    const { data: embedData, error: embedError } = await supabase.functions.invoke(
+      'embed',
+      { body: { text: queryText } }
+    )
+    if (embedError) throw embedError
+    const query_vector = embedData.vector
 
-    // 3. 장르 필터링
-    if (profile.genre) {
-      query = query.eq('genre', profile.genre)
-    }
+    // 3. 1차 필터링에 사용할 태그 준비 (선택 사항이지만 정확도 향상에 도움)
+    const p_mood_tags = moodsToImdbTags(profile.moods)
+    
+    // 4. [수정] DB의 'match_contents' 함수(RPC)를 호출
+    const { data, error } = await supabase.rpc('match_contents', {
+      query_vector: query_vector, // AI 검색 벡터
+      match_count: 5,             // 5개 결과 요청
+      p_genre: profile.genre,     // 1차 필터: 장르
+      p_mood_tags: p_mood_tags    // 1차 필터: 태그
+    })
 
-    // 4. 무드 태그 필터링
-    if (profile.moods && profile.moods.length > 0) {
-      const imdbTags = moodsToImdbTags(profile.moods)
-      // tags 배열과 겹치는 항목이 있는지 확인 (OR 조건)
-      query = query.overlaps('tags', imdbTags)
-    }
-
-    const { data: existingContents, error: queryError } = await query
-      .order('imdb_rating', { ascending: false, nullsFirst: false }) // 평점 높은 순
-      .limit(20) // OTT 필터링을 고려해 여유있게 20개 가져옴
-
-    if (queryError) {
-      console.error('추천 콘텐츠 조회 실패:', queryError)
+    if (error) {
+      console.error('벡터 검색(RPC) 실패:', error)
       return []
     }
-
-    // [제거] DB에 3개 미만일 때 TMDB API를 호출하는 로직 (fetchAndSaveRecommendations) 삭제
-    // [제거] OTT 정보를 실시간으로 추가하는 로직 (enrichContentWithOTT) 삭제
-
-    // 5. OTT 제공자가 실제로 있는 콘텐츠만 필터링 (빈 배열 제외)
-    const contentsWithOTT = (existingContents || []).filter(
-      (content) => content.ott_providers && content.ott_providers.length > 0
+    
+    // 5. OTT 제공자가 실제로 있는 콘텐츠만 필터링
+    const contentsWithOTT = (data || []).filter(
+      (content: Content) => content.ott_providers && content.ott_providers.length > 0
     )
 
-    console.log(`[추천] 전체: ${existingContents?.length || 0}개, OTT 있음: ${contentsWithOTT.length}개`)
+    console.log(`[AI 추천] "${queryText}" => ${contentsWithOTT.length}개 반환`)
 
-    // 6. 상위 3개 반환 (이미 DB에 OTT 정보가 저장되어 있음)
+    // 6. 상위 3개 반환
     return contentsWithOTT.slice(0, 3)
     
   } catch (error) {
-    console.error('추천 콘텐츠 조회 중 오류:', error)
+    console.error('AI 추천 조회 중 오류:', error)
     return []
   }
 }

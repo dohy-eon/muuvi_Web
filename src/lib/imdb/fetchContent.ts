@@ -544,6 +544,25 @@ async function saveContentToSupabase(
       return null;
     }
 
+    // [추가] 임베딩 생성 (줄거리를 벡터로 변환)
+    const textToEmbed = movie.overview || movie.title || movie.name || '';
+    let embedding: number[] | null = null;
+
+    if (textToEmbed) {
+      try {
+        const { data: embedData, error: embedError } = await supabase.functions.invoke(
+          'embed',
+          { body: { text: textToEmbed } }
+        );
+        if (embedError) throw embedError;
+        embedding = embedData.vector;
+        console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${embedding?.length || 0})`);
+      } catch (e) {
+        console.error(`[임베딩 실패] (ID: ${movie.id}):`, e);
+        // 임베딩 실패해도 콘텐츠는 저장 (vector는 null)
+      }
+    }
+
     // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
     const genres = movie.genre_ids.map((id) => genreMapKo[id] || '').filter(Boolean);
     const englishTags = movie.genre_ids.map((id) => genreMapEn[id] || '').filter(Boolean);
@@ -592,6 +611,7 @@ async function saveContentToSupabase(
       tags: allTags,
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
       ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
+      vector: embedding, // 임베딩 벡터 추가 (null 가능)
     };
 
     // [최적화] 중복 저장 방지
