@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const HF_API_URL = 'https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2'
+// Hugging Face API 새 엔드포인트
+const HF_API_URL = 'https://router.huggingface.co/hf-inference'
+const MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2'
 
 // CORS 헤더 설정
 const corsHeaders = {
@@ -29,7 +31,7 @@ serve(async (req) => {
 
     console.log(`[임베딩 요청] 텍스트: "${text.slice(0, 50)}..."`)
 
-    // 3. Hugging Face Inference API 호출
+    // 3. Hugging Face Inference API 호출 (새 엔드포인트)
     const response = await fetch(HF_API_URL, {
       method: 'POST',
       headers: {
@@ -37,6 +39,7 @@ serve(async (req) => {
         'Authorization': `Bearer ${hfApiKey}`
       },
       body: JSON.stringify({
+        model: MODEL_NAME, // 모델 이름을 body에 명시
         inputs: text,
         options: { wait_for_model: true }
       })
