@@ -120,10 +120,10 @@ async function fetchMoviesFromTMDB(
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       language: 'ko-KR',
-      'vote_count.gte': '100', // 최소 평가 수 (품질 보장)
-      'vote_average.gte': '6.0', // 최소 평점 (6.0 이상)
+      'vote_count.gte': '10', // 최소 평가 수 (100 -> 10으로 완화)
+      'vote_average.gte': '5.0', // 최소 평점 (6.0 -> 5.0으로 완화)
       page: '1',
-      // 'with_original_language': 'ko', // 한국 작품 우선 (선택사항) - 주석 처리하여 검색 범위 확대
+      'with_original_language': 'ko', // 한국 작품 우선 (선택사항)
     })
 
     // 무드를 TMDB 파라미터로 변환 (키워드와 정렬 기준을 가져옴)
@@ -227,8 +227,8 @@ async function fetchMoviesFromTMDB(
           장르: selectedGenreId ? `${genre} (ID: ${selectedGenreId})` : '없음',
           무드장르: (moodParams.genres && moodParams.genres.length > 0) ? moodParams.genres : '없음',
           키워드: (moodParams.keywords && moodParams.keywords.length > 0) ? moodParams.keywords[0] : '없음',
-          최소평점: '6.0',
-          최소평가수: '100',
+            최소평점: '5.0',
+            최소평가수: '10',
           기간필터: isTV ? `${startYear}-01-01 이후` : `${startYear}-01-01 이후`,
           엔드포인트: endpoint, // 중요: TV는 TV, Movie는 Movie로 유지
         },
@@ -238,9 +238,9 @@ async function fetchMoviesFromTMDB(
       params.delete('vote_average.gte')
       console.log('[재검색] 최소 평점 필터 제거')
       
-      // 최소 평가 수 완화 (100 -> 50)
-      params.set('vote_count.gte', '50')
-      console.log('[재검색] 최소 평가 수 완화 (100 -> 50)')
+      // 최소 평가 수 완화 (10 -> 5)
+      params.set('vote_count.gte', '5')
+      console.log('[재검색] 최소 평가 수 완화 (10 -> 5)')
       
       // 최근 10년 제한 제거
       if (isTV) {
@@ -298,7 +298,7 @@ async function fetchMoviesFromTMDB(
               엔드포인트: endpoint,
               장르: selectedGenreId ? selectedGenreId.toString() : '없음',
               키워드: moodParams.keywords ? moodParams.keywords.join('|') : '없음',
-              최소평가수: '50 (완화됨)',
+              최소평가수: '5 (완화됨)',
             },
           })
         }
