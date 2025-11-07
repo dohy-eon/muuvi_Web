@@ -580,27 +580,97 @@ async function saveContentToSupabase(
     // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
     const genres = movie.genre_ids.map((id) => genreMapKo[id] || '').filter(Boolean);
     const englishTags = movie.genre_ids.map((id) => genreMapEn[id] || '').filter(Boolean);
-    const allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
+    let allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
 
-    // [기존 로직] 저장할 장르명 결정
+    // [추가] 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
+    allTags = allTags.flatMap(tag => 
+      tag.includes('&') 
+        ? tag.split('&').map(t => t.trim()).filter(Boolean)
+        : tag
+    );
+    
+    // [추가] 영문 태그를 한글로 번역
+    const tagTranslation: Record<string, string> = {
+      // 장르
+      'Action': '액션',
+      'Adventure': '모험',
+      'Animation': '애니메이션',
+      'Comedy': '코미디',
+      'Crime': '범죄',
+      'Documentary': '다큐멘터리',
+      'Drama': '드라마',
+      'Family': '가족',
+      'Fantasy': '판타지',
+      'History': '역사',
+      'Horror': '공포',
+      'Music': '음악',
+      'Mystery': '미스터리',
+      'Romance': '로맨스',
+      'Science Fiction': 'SF',
+      'Sci-Fi': 'SF',
+      'Thriller': '스릴러',
+      'War': '전쟁',
+      'Western': '서부',
+      'Reality': '리얼리티',
+      'Talk Show': '토크쇼',
+      'News': '뉴스',
+      // TV 타입
+      'TV Movie': 'TV영화',
+    };
+    
+    // 번역 적용
+    allTags = allTags.map(tag => tagTranslation[tag] || tag);
+    
+    // [추가] 중복 제거 (번역 후)
+    allTags = [...new Set(allTags)];
+
+    // [개선] 태그에서 장르 추론 및 정리
     const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID;
     let contentGenre = '영화'; // 기본값
     
+    // 장르 키워드 매핑 (태그에서 장르 추론용 - 이미 번역된 한글 태그)
+    const genreKeywords: Record<string, string[]> = {
+      '애니메이션': ['애니메이션'],
+      '드라마': ['드라마'],
+      '예능': ['리얼리티', '토크쇼'],
+    };
+    
+    // 태그에서 장르 감지
+    let detectedGenre: string | null = null;
+    for (const [genre, keywords] of Object.entries(genreKeywords)) {
+      if (keywords.some(keyword => allTags.includes(keyword))) {
+        detectedGenre = genre;
+        // 태그에서 장르 키워드 제거
+        allTags = allTags.filter(tag => !keywords.includes(tag));
+        break;
+      }
+    }
+    
+    // 장르 결정 (우선순위: selectedGenre > 태그에서 감지 > genre_ids로 판단)
     if (selectedGenre) {
       if (selectedGenre === '영화') {
         contentGenre = '영화';
       } else if (genreMapForSave[selectedGenre] && movie.genre_ids.includes(genreMapForSave[selectedGenre])) {
         contentGenre = selectedGenre;
+      } else if (detectedGenre) {
+        contentGenre = detectedGenre; // 태그에서 감지된 장르 사용
       } else {
-          // 선택한 장르가 콘텐츠에 없으면, 콘텐츠의 주 장르로 대체
-          if (movie.genre_ids.includes(18)) contentGenre = '드라마';
-          else if (movie.genre_ids.includes(16)) contentGenre = '애니메이션';
-          else if (movie.genre_ids.includes(10770)) contentGenre = '예능';
-      }
-    } else {
+        // 선택한 장르가 콘텐츠에 없으면, genre_ids로 판단
         if (movie.genre_ids.includes(18)) contentGenre = '드라마';
         else if (movie.genre_ids.includes(16)) contentGenre = '애니메이션';
         else if (movie.genre_ids.includes(10770)) contentGenre = '예능';
+      }
+    } else {
+      // selectedGenre가 없으면 태그 또는 genre_ids로 판단
+      if (detectedGenre) {
+        contentGenre = detectedGenre;
+      } else if (movie.genre_ids.includes(18)) {
+        contentGenre = '드라마';
+      } else if (movie.genre_ids.includes(16)) {
+        contentGenre = '애니메이션';
+      } else if (movie.genre_ids.includes(10770)) {
+        contentGenre = '예능';
+      }
     }
 
     const contentTitle = movie.title || movie.name || '';

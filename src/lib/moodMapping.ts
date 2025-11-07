@@ -1,16 +1,16 @@
 /**
- * 무드 ID를 IMDB 장르/태그로 매핑
+ * 무드 ID를 한글 장르/태그로 매핑
  */
 export const moodToImdbTags: Record<string, string[]> = {
-  '01': ['Romance', 'Drama'], // Romance
-  '02': ['Horror', 'Thriller'], // Horror
-  '03': ['Comedy'], // Comedy
-  '04': ['Sci-Fi', 'Science Fiction'], // SF
-  '05': ['Fantasy'], // Fantasy
-  '06': ['Adventure'], // Adventure
-  '07': ['Action'], // Action
-  '08': ['Drama', 'Family'], // Healing
-  '09': ['Mystery', 'Thriller'], // Mystery
+  '01': ['로맨스', '드라마'], // Romance
+  '02': ['공포', '스릴러'], // Horror
+  '03': ['코미디'], // Comedy
+  '04': ['SF'], // SF
+  '05': ['판타지'], // Fantasy
+  '06': ['모험'], // Adventure
+  '07': ['액션'], // Action
+  '08': ['드라마', '가족'], // Healing
+  '09': ['미스터리', '스릴러'], // Mystery
 }
 
 /**

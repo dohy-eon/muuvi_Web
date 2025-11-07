@@ -6,35 +6,31 @@ interface RecommendationCardProps {
   content: Content
 }
 
-// 장르/태그 색상 매핑 (실제 장르 기반)
+// 장르/태그 색상 매핑 (한글 태그 기반)
 const genreTagColors: Record<string, string> = {
-  // 한글 장르
+  // 주요 장르
   '로맨스': 'bg-[#ffbdbd]',
   '공포': 'bg-[#2c2c2c]',
-  '호러': 'bg-[#2c2c2c]',
   '코미디': 'bg-[#ffd93d]',
-  '공상과학': 'bg-[#003f5c]',
   'SF': 'bg-[#003f5c]',
   '판타지': 'bg-[#9b59b6]',
   '모험': 'bg-[#ff8c42]',
-  '어드벤처': 'bg-[#ff8c42]',
   '액션': 'bg-[#e74c3c]',
   '드라마': 'bg-[#8fd19e]',
   '가족': 'bg-[#8fd19e]',
-  '미스테리': 'bg-[#7f8c8d]',
+  '미스터리': 'bg-[#7f8c8d]',
   '스릴러': 'bg-[#7f8c8d]',
-  // 영문 장르
-  'Romance': 'bg-[#ffbdbd]',
-  'Horror': 'bg-[#2c2c2c]',
-  'Comedy': 'bg-[#ffd93d]',
-  'Science Fiction': 'bg-[#003f5c]',
-  'Fantasy': 'bg-[#9b59b6]',
-  'Adventure': 'bg-[#ff8c42]',
-  'Action': 'bg-[#e74c3c]',
-  'Drama': 'bg-[#8fd19e]',
-  'Family': 'bg-[#8fd19e]',
-  'Mystery': 'bg-[#7f8c8d]',
-  'Thriller': 'bg-[#7f8c8d]',
+  // 추가 장르
+  '애니메이션': 'bg-[#9b59b6]',
+  '범죄': 'bg-[#2c2c2c]',
+  '다큐멘터리': 'bg-[#7f8c8d]',
+  '역사': 'bg-[#8d6e63]',
+  '음악': 'bg-[#ff6b9d]',
+  '전쟁': 'bg-[#5d4037]',
+  '서부': 'bg-[#d4a574]',
+  '리얼리티': 'bg-[#ffd93d]',
+  '토크쇼': 'bg-[#8fd19e]',
+  'TV영화': 'bg-[#9b59b6]',
   // 기본 색상
   'default': 'bg-[#9b59b6]',
 }
@@ -43,9 +39,15 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
   const navigate = useNavigate()
   
   // 실제 장르 태그 사용 (최대 2개)
-  // content.tags에서 실제 TMDB 장르를 가져옴 (예: "Horror", "Thriller", "공포", "스릴러")
+  // content.tags에서 실제 TMDB 장르를 가져옴
+  // & 기호로 연결된 복합 태그는 분리 (예: "Action & Adventure" → "Action", "Adventure")
   const genreTags = content.tags && content.tags.length > 0 
-    ? content.tags.slice(0, 2) 
+    ? content.tags
+        .flatMap(tag => tag.includes('&') 
+          ? tag.split('&').map(t => t.trim()).filter(Boolean)
+          : tag
+        )
+        .slice(0, 2) // 최대 2개만
     : [] // 태그가 없으면 표시하지 않음
 
   const handleClick = () => {

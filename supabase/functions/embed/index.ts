@@ -1,12 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-// Hugging Face API 새 엔드포인트
-const HF_API_URL = 'https://router.huggingface.co/hf-inference'
-const MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2'
+// OpenAI Embeddings API
+const OPENAI_API_URL = 'https://api.openai.com/v1/embeddings'
 
 // CORS 헤더 설정
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // localhost 및 향후 배포 도메인 허용
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
@@ -19,9 +18,9 @@ serve(async (req) => {
 
   try {
     // 2. Supabase Secret에서 API 키 가져오기
-    const hfApiKey = Deno.env.get('HF_API_KEY')
-    if (!hfApiKey) {
-      throw new Error('Hugging Face API Key is not set in function secrets.')
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API Key is not set in function secrets.')
     }
 
     const { text } = await req.json()
@@ -31,31 +30,29 @@ serve(async (req) => {
 
     console.log(`[임베딩 요청] 텍스트: "${text.slice(0, 50)}..."`)
 
-    // 3. Hugging Face Inference API 호출 (새 엔드포인트)
-    const response = await fetch(HF_API_URL, {
+    // 3. OpenAI Embeddings API 호출
+    const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${hfApiKey}`
+        'Authorization': `Bearer ${openaiApiKey}`
       },
       body: JSON.stringify({
-        model: MODEL_NAME, // 모델 이름을 body에 명시
-        inputs: text,
-        options: { wait_for_model: true }
+        model: 'text-embedding-3-small', // 1536 차원, 저렴함
+        input: text,
+        encoding_format: 'float'
       })
     })
 
     if (!response.ok) {
       const errorBody = await response.text()
-      console.error(`[HF API 에러] ${response.status}: ${errorBody}`)
-      throw new Error(`Hugging Face API Error: ${response.status} ${errorBody}`)
+      console.error(`[OpenAI API 에러] ${response.status}: ${errorBody}`)
+      throw new Error(`OpenAI API Error: ${response.status} ${errorBody}`)
     }
 
     // 4. 벡터 결과 반환
-    const vectors = await response.json()
-    
-    // Hugging Face 응답은 [ [ ... ] ] 형태일 수 있으므로 0번째 벡터를 사용
-    const vector = Array.isArray(vectors[0]) ? vectors[0] : vectors
+    const data = await response.json()
+    const vector = data.data[0].embedding
     
     console.log(`[임베딩 성공] 벡터 크기: ${vector.length}`)
 
