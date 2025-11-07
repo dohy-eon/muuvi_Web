@@ -22,7 +22,7 @@ serve(async (req) => {
         await fetchAndSaveRecommendations(genre, [mood])
         
         // TMDB API Rate Limit (초당 40회)을 피하기 위해 2초간 대기
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
 

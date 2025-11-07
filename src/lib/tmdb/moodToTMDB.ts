@@ -1,4 +1,4 @@
-import { MOOD_TO_TMDB_GENRE, MOOD_TO_TMDB_KEYWORDS, MOOD_TO_SORT_BY } from './genreMapping'
+import { MOOD_TO_TMDB_GENRE, MOOD_TO_TMDB_KEYWORDS, MOOD_TO_SORT_BY } from './genreMapping.ts'
 
 /**
  * 무드 ID 배열을 TMDB 장르 ID 배열로 변환

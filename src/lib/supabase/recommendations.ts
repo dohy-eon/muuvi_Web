@@ -1,6 +1,6 @@
-import { supabase } from '../supabase'
-import { moodsToImdbTags } from '../moodMapping'
-import type { Content, Profile } from '../../types'
+import { supabase } from '../supabase.ts'
+import { moodsToImdbTags } from '../moodMapping.ts'
+import type { Content, Profile } from '../../types/index.ts'
 
 /**
  * 사용자 프로필 기반 추천 콘텐츠 가져오기

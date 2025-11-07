@@ -1,5 +1,5 @@
-import { supabase } from '../supabase'
-import type { OnboardingData, Profile } from '../../types'
+import { supabase } from '../supabase.ts'
+import type { OnboardingData, Profile } from '../../types/index.ts'
 
 /**
  * 사용자 프로필 저장 (온보딩 데이터)

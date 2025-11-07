@@ -1,7 +1,7 @@
-import { supabase } from '../supabase'
-import { GENRE_TO_TMDB_ID } from '../tmdb/genreMapping'
-import { moodsToTMDBParams } from '../tmdb/moodToTMDB'
-import type { Content, OTTProvider } from '../../types'
+import { supabase } from '../supabase.ts'
+import { GENRE_TO_TMDB_ID } from '../tmdb/genreMapping.ts'
+import { moodsToTMDBParams } from '../tmdb/moodToTMDB.ts'
+import type { Content, OTTProvider } from '../../types/index.ts'
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
