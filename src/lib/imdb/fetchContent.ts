@@ -123,7 +123,7 @@ async function fetchMoviesFromTMDB(
       'vote_count.gte': '10', // 최소 평가 수 (100 -> 10으로 완화)
       'vote_average.gte': '5.0', // 최소 평점 (6.0 -> 5.0으로 완화)
       page: '1',
-      'with_original_language': 'ko', // 한국 작품 우선 (선택사항)
+      // 'with_original_language': 'ko', // 한국 작품 우선 (선택사항)
     })
 
     // 무드를 TMDB 파라미터로 변환 (키워드와 정렬 기준을 가져옴)
@@ -137,9 +137,9 @@ async function fetchMoviesFromTMDB(
 
     // 1. [장르 필터] 적용
     // '영화'는 엔드포인트(/discover/movie) 자체로 필터링됩니다.
-    // '예능'은 아래 'with_type'으로 필터링됩니다.
+    // '예능'은 아래 'with_type'으로만 필터링됩니다 (장르 ID 없음).
     // '드라마', '애니메이션'만 with_genres에 ID를 명시적으로 추가합니다.
-    const selectedGenreId = genre !== '영화' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
+    const selectedGenreId = genre !== '영화' && genre !== '예능' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
 
     if (selectedGenreId && (genre === '드라마' || genre === '애니메이션')) {
       params.append('with_genres', selectedGenreId.toString())
@@ -151,7 +151,8 @@ async function fetchMoviesFromTMDB(
     // 2. [무드 필터] 적용 (키워드 기반)
     // 무드에서 파생된 장르(moodParams.genres)는 의도치 않은 AND 조건으로
     // 검색 결과를 0으로 만드므로, 키워드(moodParams.keywords)만 사용합니다.
-    if (moodParams.keywords && moodParams.keywords.length > 0) {
+    // 예능은 키워드 필터를 사용하지 않음 (검색 결과가 너무 제한적)
+    if (genre !== '예능' && moodParams.keywords && moodParams.keywords.length > 0) {
       // 여러 키워드를 OR 조건(|)으로 연결하여 더 넓은 범위 검색
       const keywordString = moodParams.keywords.join('|')
       params.append('with_keywords', keywordString)
@@ -161,7 +162,7 @@ async function fetchMoviesFromTMDB(
         논리: 'OR (|)',
       })
     } else {
-      console.log('[무드 필터] 없음')
+      console.log('[무드 필터] 없음 또는 예능 (키워드 필터 제외)')
     }
 
     // 3. [정렬 기준] 적용
