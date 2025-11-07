@@ -550,16 +550,30 @@ async function saveContentToSupabase(
 
     if (textToEmbed) {
       try {
+        // 텍스트 길이 제한 (512자) - embed 함수와 동일
+        const truncatedText = textToEmbed.slice(0, 512);
+        
         const { data: embedData, error: embedError } = await supabase.functions.invoke(
           'embed',
-          { body: { text: textToEmbed } }
+          { body: { text: truncatedText } }
         );
-        if (embedError) throw embedError;
-        embedding = embedData.vector;
-        console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${embedding?.length || 0})`);
-      } catch (e) {
-        console.error(`[임베딩 실패] (ID: ${movie.id}):`, e);
+        
+        if (embedError) {
+          console.error(`[임베딩 에러] (ID: ${movie.id}):`, embedError);
+          throw embedError;
+        }
+        
+        if (!embedData || !embedData.vector) {
+          console.warn(`[임베딩 응답 없음] (ID: ${movie.id})`);
+        } else {
+          embedding = embedData.vector;
+          const vectorSize = Array.isArray(embedding) ? embedding.length : 0;
+          console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${vectorSize})`);
+        }
+      } catch (e: any) {
+        console.error(`[임베딩 실패] (ID: ${movie.id}, 제목: ${movie.title || movie.name}):`, e.message || e);
         // 임베딩 실패해도 콘텐츠는 저장 (vector는 null)
+        embedding = null;
       }
     }
 

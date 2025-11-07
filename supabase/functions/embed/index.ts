@@ -21,29 +21,51 @@ class EmbeddingPipeline {
 serve(async (req) => {
   try {
     const { text } = await req.json()
+    
+    // 입력 검증
     if (!text) {
-      throw new Error('Missing "text" property in request body')
+      return new Response(
+        JSON.stringify({ error: 'Missing "text" property in request body' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
+    // 텍스트 길이 제한 (512자로 제한 - 모델 성능 고려)
+    const truncatedText = text.slice(0, 512)
+    console.log(`[임베딩 요청] 텍스트 길이: ${text.length} → ${truncatedText.length}`)
+
     // AI 모델 인스턴스 가져오기
+    console.log('[임베딩] 모델 로드 중...')
     const embedder = await EmbeddingPipeline.getInstance()
+    console.log('[임베딩] 모델 로드 완료')
 
     // 텍스트를 벡터로 변환
-    const output = await embedder(text, {
+    console.log('[임베딩] 벡터 생성 중...')
+    const output = await embedder(truncatedText, {
       pooling: 'mean',
       normalize: true,
     })
 
     // 벡터 데이터 추출
     const vector = Array.from(output.data)
+    console.log(`[임베딩 성공] 벡터 크기: ${vector.length}`)
 
     return new Response(JSON.stringify({ vector }), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    console.error('[임베딩 에러]', error)
+    console.error('[임베딩 에러 스택]', error.stack)
+    
+    return new Response(
+      JSON.stringify({ 
+        error: error.message || 'Unknown error',
+        details: error.toString()
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
   }
 })
