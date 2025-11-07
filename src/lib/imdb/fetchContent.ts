@@ -538,6 +538,12 @@ async function saveContentToSupabase(
     
     const imdbId = details?.imdbId || null;
 
+    // [필터링] OTT 제공자가 없으면 저장하지 않음 (시청 불가능한 콘텐츠 제외)
+    if (!ottProviders || ottProviders.length === 0) {
+      console.log(`[OTT 없음] 저장 건너뜀: ${movie.title || movie.name} (ID: ${movie.id})`);
+      return null;
+    }
+
     // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
     const genres = movie.genre_ids.map((id) => genreMapKo[id] || '').filter(Boolean);
     const englishTags = movie.genre_ids.map((id) => genreMapEn[id] || '').filter(Boolean);
@@ -681,7 +687,8 @@ export async function fetchAndSaveRecommendations(
     
     const savedContents = (await Promise.all(savePromises)).filter(Boolean) as Content[];
     
-    console.log(`[${genre}+${moods}] 저장 완료: ${savedContents.length} / ${movies.length}개`);
+    const ottFiltered = movies.length - savedContents.length;
+    console.log(`[${genre}+${moods}] 저장 완료: ${savedContents.length} / ${movies.length}개 (OTT 없음: ${ottFiltered}개)`);
 
     return savedContents;
     

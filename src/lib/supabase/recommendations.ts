@@ -14,12 +14,15 @@ export async function getRecommendations(
     // 1. Supabase에 저장된 콘텐츠만 조회
     let query = supabase.from('contents').select('*')
 
-    // 2. 장르 필터링
+    // 2. OTT 제공자가 있는 콘텐츠만 필터링 (시청 가능한 콘텐츠만)
+    query = query.not('ott_providers', 'is', null)
+
+    // 3. 장르 필터링
     if (profile.genre) {
       query = query.eq('genre', profile.genre)
     }
 
-    // 3. 무드 태그 필터링
+    // 4. 무드 태그 필터링
     if (profile.moods && profile.moods.length > 0) {
       const imdbTags = moodsToImdbTags(profile.moods)
       // tags 배열과 겹치는 항목이 있는지 확인 (OR 조건)
@@ -28,7 +31,7 @@ export async function getRecommendations(
 
     const { data: existingContents, error: queryError } = await query
       .order('imdb_rating', { ascending: false, nullsFirst: false }) // 평점 높은 순
-      .limit(10) // 10개만 가져옴
+      .limit(20) // OTT 필터링을 고려해 여유있게 20개 가져옴
 
     if (queryError) {
       console.error('추천 콘텐츠 조회 실패:', queryError)
@@ -38,8 +41,15 @@ export async function getRecommendations(
     // [제거] DB에 3개 미만일 때 TMDB API를 호출하는 로직 (fetchAndSaveRecommendations) 삭제
     // [제거] OTT 정보를 실시간으로 추가하는 로직 (enrichContentWithOTT) 삭제
 
-    // 4. 상위 3개 반환 (이미 DB에 OTT 정보가 저장되어 있음)
-    return (existingContents || []).slice(0, 3)
+    // 5. OTT 제공자가 실제로 있는 콘텐츠만 필터링 (빈 배열 제외)
+    const contentsWithOTT = (existingContents || []).filter(
+      (content) => content.ott_providers && content.ott_providers.length > 0
+    )
+
+    console.log(`[추천] 전체: ${existingContents?.length || 0}개, OTT 있음: ${contentsWithOTT.length}개`)
+
+    // 6. 상위 3개 반환 (이미 DB에 OTT 정보가 저장되어 있음)
+    return contentsWithOTT.slice(0, 3)
     
   } catch (error) {
     console.error('추천 콘텐츠 조회 중 오류:', error)
