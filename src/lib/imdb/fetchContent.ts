@@ -563,22 +563,66 @@ async function saveContentToSupabase(
       ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
     };
 
-    // [기존 로직] DB 저장
-    const { data, error } = await supabase
-      .from('contents')
-      .upsert(contentData, {
-        onConflict: 'imdb_id',
-        ignoreDuplicates: false,
-      })
-      .select()
-      .single();
+    // [최적화] 중복 저장 방지
+    // imdb_id가 있으면 imdb_id로 upsert, 없으면 title+year로 중복 체크
+    if (imdbId) {
+      // imdb_id가 있는 경우: imdb_id로 upsert
+      const { data, error } = await supabase
+        .from('contents')
+        .upsert(contentData, {
+          onConflict: 'imdb_id',
+          ignoreDuplicates: false,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error(`콘텐츠 저장 실패: ${contentTitle}`, error.message);
-      return null;
+      if (error) {
+        console.error(`콘텐츠 저장 실패: ${contentTitle}`, error.message);
+        return null;
+      }
+
+      return data;
+    } else {
+      // imdb_id가 없는 경우: title+year로 기존 콘텐츠 확인
+      const { data: existingContent } = await supabase
+        .from('contents')
+        .select('id')
+        .eq('title', contentTitle)
+        .eq('year', year)
+        .maybeSingle();
+
+      if (existingContent) {
+        // 기존 콘텐츠가 있으면 업데이트
+        const { data, error } = await supabase
+          .from('contents')
+          .update(contentData)
+          .eq('id', existingContent.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`콘텐츠 업데이트 실패: ${contentTitle}`, error.message);
+          return null;
+        }
+
+        console.log(`[중복 방지] 기존 콘텐츠 업데이트: ${contentTitle} (${year})`);
+        return data;
+      } else {
+        // 기존 콘텐츠가 없으면 새로 삽입
+        const { data, error } = await supabase
+          .from('contents')
+          .insert(contentData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`콘텐츠 삽입 실패: ${contentTitle}`, error.message);
+          return null;
+        }
+
+        return data;
+      }
     }
-
-    return data;
   } catch (error) {
     console.error(`saveContentToSupabase 오류 (${movie.id}):`, error);
     return null;
