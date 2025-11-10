@@ -185,9 +185,7 @@ async function fetchMoviesFromTMDB(
         params.append('with_type', '3|5')
         console.log('[TV 타입 필터] 예능', { with_type: '3|5 (Reality|Talk Show)' })
       } else if (genre === '드라마') {
-        // 드라마는 Scripted(4) 타입
-        params.append('with_type', '4')
-        console.log('[TV 타입 필터] 드라마', { with_type: '4 (Scripted)' })
+        console.log('[TV 타입 필터] 없음 (드라마는 장르 ID로만 필터링)')
       }
     } else {
       params.append('primary_release_date.gte', `${startYear}-01-01`)

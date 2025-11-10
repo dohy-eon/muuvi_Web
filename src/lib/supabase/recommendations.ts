@@ -106,6 +106,24 @@ export async function getRecommendations(
       )
       
       console.log(`[태그 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
+
+      if (contentsWithOTT.length === 0) {
+        const primaryMood = profile.moods[0]
+        if (profile.genre && primaryMood) {
+          try {
+            console.log(`[데이터 보충 요청] ${profile.genre} + ${primaryMood}`)
+            await supabase.functions.invoke('populate-db', {
+              body: {
+                genre: profile.genre,
+                mood: primaryMood,
+              },
+            })
+          } catch (populateError: any) {
+            console.warn('[데이터 보충 실패]', populateError?.message || populateError)
+          }
+        }
+      }
+
       return contentsWithOTT.slice(0, 3)
     }
     
