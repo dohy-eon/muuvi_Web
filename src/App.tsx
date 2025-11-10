@@ -5,6 +5,7 @@ import OnboardingStep2 from './pages/Onboarding/Step2'
 import Main from './pages/Main'
 import Content from './pages/Content'
 import MyPage from './pages/MyPage'
+import Splash from './pages/Splash'
 
 export default function App() {
   return (
@@ -16,12 +17,13 @@ export default function App() {
         >
           <div className="w-full max-w-[375px] min-h-screen bg-white relative">
             <Routes>
+              <Route path="/splash" element={<Splash />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
               <Route path="/main" element={<Main />} />
               <Route path="/content/:id" element={<Content />} />
               <Route path="/mypage" element={<MyPage />} />
-              <Route path="/" element={<Main />} />
+              <Route path="/" element={<Splash />} />
             </Routes>
           </div>
         </div>
