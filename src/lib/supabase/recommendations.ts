@@ -1,4 +1,42 @@
 import { supabase } from '../supabase.ts'
+const isDeno = typeof Deno !== 'undefined'
+
+async function getFunctionAuthHeaders() {
+  let anonKey = ''
+  let serviceKey = ''
+
+  if (isDeno) {
+    // @ts-ignore: Deno globals only in edge runtime
+    anonKey =
+      Deno.env.get('SUPABASE_ANON_KEY') ||
+      Deno.env.get('VITE_SUPABASE_ANON_KEY') ||
+      ''
+    // @ts-ignore
+    serviceKey =
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+      Deno.env.get('VITE_SUPABASE_SERVICE_ROLE_KEY') ||
+      ''
+  } else if (typeof import.meta !== 'undefined') {
+    anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || ''
+    serviceKey = (import.meta as any).env?.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+  }
+
+  const session = await supabase.auth.getSession().catch(() => null)
+  const accessToken = session?.data?.session?.access_token
+
+  const headers: Record<string, string> = {}
+  const token = accessToken || serviceKey || anonKey
+
+  if (anonKey) {
+    headers.apikey = anonKey
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  return headers
+}
 import { moodsToImdbTags } from '../moodMapping.ts' // 1차 필터링을 위해 유지
 import type { Content, Profile } from '../../types/index.ts'
 
@@ -112,11 +150,14 @@ export async function getRecommendations(
         if (profile.genre && primaryMood) {
           try {
             console.log(`[데이터 보충 요청] ${profile.genre} + ${primaryMood}`)
+            const headers = await getFunctionAuthHeaders()
+
             await supabase.functions.invoke('populate-db', {
               body: {
                 genre: profile.genre,
                 mood: primaryMood,
               },
+              headers,
             })
           } catch (populateError: any) {
             console.warn('[데이터 보충 실패]', populateError?.message || populateError)
