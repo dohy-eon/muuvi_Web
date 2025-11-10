@@ -403,6 +403,11 @@ async function fetchTVShowById(tmdbId: number): Promise<TMDBMovie | null> {
  * TMDB 영화/TV ID로 상세 정보 가져오기 (append_to_response 활용)
  * external_ids, credits, videos 등을 한 번에 가져옴
  */
+interface TMDBKeyword {
+  id: number
+  name: string
+}
+
 async function getContentDetailsFromTMDB(
   tmdbId: number,
   contentType: 'movie' | 'tv' = 'movie'
@@ -410,21 +415,36 @@ async function getContentDetailsFromTMDB(
   imdbId: string | null
   credits?: any
   videos?: any
+  genres?: TMDBGenre[]
+  keywords?: TMDBKeyword[]
 } | null> {
   try {
     const endpoint = contentType === 'tv' ? 'tv' : 'movie'
     // append_to_response로 여러 정보를 한 번에 가져오기
     const response = await fetch(
-      `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos&language=ko-KR`
+      `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
     )
 
     if (!response.ok) return null
 
     const data = await response.json()
+    const keywordsRaw = data.keywords
+    let keywords: TMDBKeyword[] = []
+
+    if (keywordsRaw) {
+      if (Array.isArray(keywordsRaw.results)) {
+        keywords = keywordsRaw.results
+      } else if (Array.isArray(keywordsRaw.keywords)) {
+        keywords = keywordsRaw.keywords
+      }
+    }
+
     return {
       imdbId: data.external_ids?.imdb_id || null,
       credits: data.credits,
       videos: data.videos,
+      genres: Array.isArray(data.genres) ? data.genres : [],
+      keywords,
     }
   } catch (error) {
     console.error('TMDB 상세 정보 가져오기 실패:', error)
@@ -648,8 +668,18 @@ async function saveContentToSupabase(
     }
 
     // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
-    const genres = movie.genre_ids.map((id) => genreMapKo[id] || '').filter(Boolean);
-    const englishTags = movie.genre_ids.map((id) => genreMapEn[id] || '').filter(Boolean);
+    const genreIdSet = new Set<number>(movie.genre_ids || [])
+    if (details?.genres) {
+      details.genres.forEach((genre) => {
+        if (typeof genre?.id === 'number') {
+          genreIdSet.add(genre.id)
+        }
+      })
+    }
+
+    const genreIds = Array.from(genreIdSet)
+    const genres = genreIds.map((id) => genreMapKo[id] || '').filter(Boolean);
+    const englishTags = genreIds.map((id) => genreMapEn[id] || '').filter(Boolean);
     let allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
 
     // [추가] 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
@@ -684,6 +714,11 @@ async function saveContentToSupabase(
       'Reality': '리얼리티',
       'Talk Show': '토크쇼',
       'News': '뉴스',
+      'War & Politics': '전쟁·정치',
+      'Action & Adventure': '액션',
+      'Sci-Fi & Fantasy': 'SF',
+      'Soap': '연속극',
+      'Kids': '키즈',
       // TV 타입
       'TV Movie': 'TV영화',
     };
@@ -691,6 +726,61 @@ async function saveContentToSupabase(
     // 번역 적용
     allTags = allTags.map(tag => tagTranslation[tag] || tag);
     
+    // [키워드 태그] TMDB 키워드 기반 태그 보강
+    if (details?.keywords && details.keywords.length > 0) {
+      const keywordTranslation: Record<string, string> = {
+        'historical drama': '사극',
+        'historical fiction': '사극',
+        'history': '역사',
+        'alternate history': '퓨전 사극',
+        'alternate past': '퓨전 사극',
+        'sageuk': '사극',
+        'fusion sageuk': '퓨전 사극',
+        'period drama': '사극',
+        'ancient korea': '사극',
+        'martial arts': '무협',
+        'warrior': '무협',
+        'sword fight': '검술',
+        'sword': '검술',
+        'politics': '정치',
+        'political intrigue': '정치',
+        'power struggle': '정치',
+        'romance': '로맨스',
+        'love': '로맨스',
+        'assassin': '암살',
+        'rebellion': '혁명',
+        'royalty': '왕실',
+        'kingdom': '왕권',
+        'court': '궁중',
+        'conspiracy': '음모',
+      }
+
+      const keywordTags = new Set<string>()
+
+      details.keywords.forEach((keyword) => {
+        if (!keyword?.name) return
+        const normalized = keyword.name.trim().toLowerCase()
+        if (!normalized) return
+
+        const translated =
+          keywordTranslation[normalized] ||
+          (normalized.includes('romance') ? '로맨스' : null) ||
+          (normalized.includes('histor') ? '사극' : null) ||
+          (normalized.includes('martial') ? '무협' : null) ||
+          (normalized.includes('sword') ? '검술' : null) ||
+          (normalized.includes('politic') ? '정치' : null) ||
+          (normalized.includes('love') ? '로맨스' : null)
+
+        if (translated) {
+          keywordTags.add(translated)
+        }
+      })
+
+      if (keywordTags.size > 0) {
+        allTags = [...allTags, ...keywordTags]
+      }
+    }
+
     // [무드 태그] 선택된 무드를 기반으로 태그 추가 (예: 공포, 스릴러)
     const moodTagOrder: string[] = []
 

@@ -5,6 +5,14 @@ import {
   importSpecificTVShows,
 } from '../../../src/lib/imdb/fetchContent.ts'
 
+// Deno 전역 선언 (Vite 빌드 오류 방지를 위함)
+// @ts-ignore
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined
+  }
+}
+
 const GENRES = ['영화', '드라마', '애니메이션', '예능']
 const MOODS = ['01', '02', '03', '04', '05', '06', '07', '08', '09']
 
@@ -17,9 +25,41 @@ const corsHeaders = {
 
 console.log('Populate DB Function Loaded (Single Job Mode)')
 
+const INTERNAL_SECRET =
+  typeof Deno !== 'undefined'
+    ? // @ts-ignore Deno runtime
+      Deno.env.get('POPULATE_DB_SECRET') || ''
+    : ''
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (INTERNAL_SECRET) {
+    const userAgent = (req.headers.get('user-agent') || '').toLowerCase()
+    const authorization = req.headers.get('authorization')
+    const providedSecret =
+      req.headers.get('x-populate-db-secret') ||
+      req.headers.get('x-populate-secret')
+
+    const isAuthorized =
+      (authorization && authorization.startsWith('Bearer ')) ||
+      (providedSecret && providedSecret === INTERNAL_SECRET)
+    const isInternalPgNet = userAgent.startsWith('pg_net/')
+
+    if (!isAuthorized && !isInternalPgNet) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized request' }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+          status: 401,
+        },
+      )
+    }
   }
 
   try {
