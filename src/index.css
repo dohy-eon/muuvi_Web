@@ -2,6 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes splashFadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splashLogoPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-splash-text {
+  animation: splashFadeInUp 0.7s ease-out forwards;
+}
+
+.animate-splash-logo {
+  opacity: 0;
+  animation: splashLogoPop 0.9s ease-out forwards;
+}
+
+@keyframes splashTyping {
+  0% {
+    max-width: 0;
+  }
+  100% {
+    max-width: 100%;
+  }
+}
+
+@keyframes splashCaret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.typing-mask {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  padding-right: 0.4rem;
+  max-width: 0;
+  animation: splashTyping 1.6s steps(20) forwards;
+  animation-delay: var(--typing-delay, 0s);
+}
+
+.typing-mask::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0.05rem;
+  width: 3px;
+  height: 100%;
+  background-color: currentColor;
+  opacity: 0;
+  animation: splashCaret 0.7s steps(1) infinite;
+  animation-delay: calc(var(--typing-delay, 0s) + 1.6s);
+}
+
 @layer base {
   :root {
     --safe-area-inset-top: env(safe-area-inset-top, 0px);
