@@ -32,47 +32,33 @@ export default function Main() {
   const [isLoading, setIsLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
-  const [reloadKey, setReloadKey] = useState(0)
   const [recommendEnabled, setRecommendEnabled] = useState(true)
   // 현재 표시 중인 카드의 인덱스 상태
   const [currentIndex, setCurrentIndex] = useState(0)
 
   // 온보딩으로 이동하는 함수
-  const handleRestart = async () => {
-    // 기존 추천 내역 초기화
+  const handleRestart = () => {
     setRecommendations([])
-    setIsLoading(true)
-    
-    // 프로필이 있으면 강제로 새로 추천 받기 (기존 내역 무시)
-    if (profile) {
-      try {
-        const contents = await getRecommendations(profile, true) // forceRefresh = true
-        setRecommendations(contents)
-        setIsLoading(false)
-      } catch (error) {
-        console.error('새 추천 가져오기 실패:', error)
-      }
-    }
-    
-    // 온보딩 데이터 초기화
-    setOnboardingData(null)
-    // 프로필 초기화 (온보딩으로 돌아가기 위해)
     setProfile(null)
-    // 온보딩 페이지로 이동
+    setOnboardingData(null)
+    setIsLoading(false)
     navigate('/onboarding')
   }
 
   const loadRecommendations = useCallback(async (forceRefresh: boolean = false) => {
+      setIsLoading(true)
       try {
         // 임시 user_id (실제로는 인증된 사용자 ID 사용)
         const userId = 'temp-user-id'
 
         // 프로필 가져오기 또는 생성
         let profile = await getProfile(userId)
-        
-        if (!profile && onboardingData) {
-          // 프로필이 없으면 온보딩 데이터로 생성
-          profile = await saveProfile(userId, onboardingData)
+
+        const shouldSyncOnboarding = onboardingData && (forceRefresh || !profile)
+
+        if (shouldSyncOnboarding) {
+          const updatedProfile = await saveProfile(userId, onboardingData)
+          profile = updatedProfile ?? profile
         }
 
         if (profile) {
@@ -91,10 +77,13 @@ export default function Main() {
       }
   }, [onboardingData])
 
+  const handleRerecommend = () => {
+    void loadRecommendations(true)
+  }
+
   useEffect(() => {
-    setIsLoading(true)
     loadRecommendations()
-  }, [loadRecommendations, reloadKey])
+  }, [loadRecommendations])
 
   if (isLoading) {
     return <RecommendationLoading profile={profile} onboardingData={onboardingData} />
@@ -167,7 +156,7 @@ export default function Main() {
           type="button"
           aria-label="reload-recommendations"
           className="size-8 flex items-center justify-center rounded-full bg-white/0"
-          onClick={() => setReloadKey((k) => k + 1)}
+          onClick={handleRerecommend}
         >
           <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
         </button>
