@@ -692,6 +692,8 @@ async function saveContentToSupabase(
     allTags = allTags.map(tag => tagTranslation[tag] || tag);
     
     // [무드 태그] 선택된 무드를 기반으로 태그 추가 (예: 공포, 스릴러)
+    const moodTagOrder: string[] = []
+
     if (Array.isArray(moodIds) && moodIds.length > 0) {
       const moodTagsToAdd = new Set<string>()
       moodIds.forEach((moodId) => {
@@ -702,7 +704,12 @@ async function saveContentToSupabase(
 
         if (options.forceMoodTags || hasMatchingGenre) {
           const moodDerivedTags = moodsToImdbTags([moodId])
-          moodDerivedTags.forEach((tag) => moodTagsToAdd.add(tag))
+          moodDerivedTags.forEach((tag) => {
+            moodTagsToAdd.add(tag)
+            if (!moodTagOrder.includes(tag)) {
+              moodTagOrder.push(tag)
+            }
+          })
         }
       })
 
@@ -713,6 +720,12 @@ async function saveContentToSupabase(
 
     // [추가] 중복 제거 (번역 및 무드 태그 적용 후)
     allTags = [...new Set(allTags)];
+
+    if (moodTagOrder.length > 0) {
+      const orderedMoodTags = moodTagOrder.filter((tag) => allTags.includes(tag))
+      const otherTags = allTags.filter((tag) => !orderedMoodTags.includes(tag))
+      allTags = [...orderedMoodTags, ...otherTags]
+    }
 
     // [개선] 태그에서 장르 추론 및 정리
     const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID;
