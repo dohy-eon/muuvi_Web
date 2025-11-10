@@ -1,6 +1,7 @@
 import { supabase } from '../supabase.ts'
 import { GENRE_TO_TMDB_ID } from '../tmdb/genreMapping.ts'
 import { moodsToTMDBParams } from '../tmdb/moodToTMDB.ts'
+import { moodsToImdbTags } from '../moodMapping.ts'
 import type { Content, OTTProvider } from '../../types/index.ts'
 
 // Deno 환경인지 확인 (Supabase Edge Function)
@@ -120,8 +121,8 @@ async function fetchMoviesFromTMDB(
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       language: 'ko-KR',
-      'vote_count.gte': '10', // 최소 평가 수 (100 -> 10으로 완화)
-      'vote_average.gte': '5.0', // 최소 평점 (6.0 -> 5.0으로 완화)
+      'vote_count.gte': '1', // 최소 평가 수 완화
+      'vote_average.gte': '4.0', // 최소 평점 완화
       page: '1',
       // 'with_original_language': 'ko', // 한국 작품 우선 (선택사항)
     })
@@ -514,7 +515,8 @@ async function saveContentToSupabase(
   movie: TMDBMovie,
   selectedGenre: string,
   genreMapKo: Record<number, string>,
-  genreMapEn: Record<number, string>
+  genreMapEn: Record<number, string>,
+  moodIds: string[]
 ): Promise<Content | null> {
   try {
     // [기존 로직] 콘텐츠 타입 결정 (selectedGenre 우선)
@@ -619,7 +621,15 @@ async function saveContentToSupabase(
     // 번역 적용
     allTags = allTags.map(tag => tagTranslation[tag] || tag);
     
-    // [추가] 중복 제거 (번역 후)
+    // [무드 태그] 선택된 무드를 기반으로 태그 추가 (예: 공포, 스릴러)
+    if (moodIds && moodIds.length > 0) {
+      const moodDerivedTags = moodsToImdbTags(moodIds);
+      if (moodDerivedTags.length > 0) {
+        allTags = [...allTags, ...moodDerivedTags];
+      }
+    }
+
+    // [추가] 중복 제거 (번역 및 무드 태그 적용 후)
     allTags = [...new Set(allTags)];
 
     // [개선] 태그에서 장르 추론 및 정리
@@ -817,7 +827,7 @@ export async function fetchAndSaveRecommendations(
 
     // 3. [최적화] 20개 콘텐츠 저장을 병렬로 실행
     const savePromises = movies.map(movie => 
-      saveContentToSupabase(movie, genre, genreMapKo, genreMapEn)
+      saveContentToSupabase(movie, genre, genreMapKo, genreMapEn, moods)
     );
     
     const savedContents = (await Promise.all(savePromises)).filter(Boolean) as Content[];
