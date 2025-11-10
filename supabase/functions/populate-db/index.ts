@@ -1,6 +1,9 @@
 // @ts-ignore: Deno 환경에서 제공되는 모듈
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { fetchAndSaveRecommendations } from '../../../src/lib/imdb/fetchContent.ts'
+import {
+  fetchAndSaveRecommendations,
+  importSpecificTVShows,
+} from '../../../src/lib/imdb/fetchContent.ts'
 
 const GENRES = ['영화', '드라마', '애니메이션', '예능']
 const MOODS = ['01', '02', '03', '04', '05', '06', '07', '08', '09']
@@ -22,13 +25,75 @@ serve(async (req) => {
   try {
     let genre: string | undefined
     let mood: string | undefined
+    let tmdbIds: number[] | undefined
 
     try {
       const body = await req.json()
       genre = body?.genre
       mood = body?.mood
+      if (Array.isArray(body?.tmdbIds)) {
+        tmdbIds = body.tmdbIds
+          .map((id: unknown) => {
+            const parsed = typeof id === 'string' ? parseInt(id, 10) : id
+            return Number.isFinite(parsed) ? Number(parsed) : null
+          })
+          .filter((value): value is number => value !== null)
+      }
     } catch (_error) {
       // body가 없거나 JSON 파싱 실패 시 무시하고 자동 선택 로직으로 진행
+    }
+
+    if (tmdbIds && tmdbIds.length > 0) {
+      const moodIds =
+        mood !== undefined
+          ? [mood]
+          : Array.isArray(req.headers.get('x-moods'))
+          ? req.headers
+              .get('x-moods')!
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : []
+
+      if (!genre) {
+        genre = '드라마'
+      }
+
+      if (moodIds.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'mood 값을 제공해야 합니다.' }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+            status: 400,
+          },
+        )
+      }
+
+      console.log(
+        `[수동 TMDB 수집] genre=${genre}, moods=${moodIds.join(
+          ',',
+        )}, tmdbIds=${tmdbIds.join(',')}`,
+      )
+
+      const savedContents = await importSpecificTVShows(tmdbIds, moodIds)
+
+      return new Response(
+        JSON.stringify({
+          message: '특정 TMDB TV 수집 완료',
+          inserted: savedContents.length,
+          tmdbIds,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+          status: 200,
+        },
+      )
     }
 
     if (!genre || !mood) {
