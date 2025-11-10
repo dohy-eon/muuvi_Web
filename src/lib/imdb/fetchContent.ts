@@ -1,6 +1,7 @@
 import { supabase } from '../supabase.ts'
-import { GENRE_TO_TMDB_ID } from '../tmdb/genreMapping.ts'
+import { GENRE_TO_TMDB_ID, MOOD_TO_TMDB_GENRE } from '../tmdb/genreMapping.ts'
 import { moodsToTMDBParams } from '../tmdb/moodToTMDB.ts'
+import { moodsToImdbTags } from '../moodMapping.ts'
 import type { Content, OTTProvider } from '../../types/index.ts'
 
 // Deno 환경인지 확인 (Supabase Edge Function)
@@ -120,8 +121,8 @@ async function fetchMoviesFromTMDB(
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       language: 'ko-KR',
-      'vote_count.gte': '10', // 최소 평가 수 (100 -> 10으로 완화)
-      'vote_average.gte': '5.0', // 최소 평점 (6.0 -> 5.0으로 완화)
+      'vote_count.gte': '1', // 최소 평가 수 완화
+      'vote_average.gte': '4.0', // 최소 평점 완화
       page: '1',
       // 'with_original_language': 'ko', // 한국 작품 우선 (선택사항)
     })
@@ -185,9 +186,7 @@ async function fetchMoviesFromTMDB(
         params.append('with_type', '3|5')
         console.log('[TV 타입 필터] 예능', { with_type: '3|5 (Reality|Talk Show)' })
       } else if (genre === '드라마') {
-        // 드라마는 Scripted(4) 타입
-        params.append('with_type', '4')
-        console.log('[TV 타입 필터] 드라마', { with_type: '4 (Scripted)' })
+        console.log('[TV 타입 필터] 없음 (드라마는 장르 ID로만 필터링)')
       }
     } else {
       params.append('primary_release_date.gte', `${startYear}-01-01`)
@@ -343,6 +342,60 @@ async function fetchMoviesFromTMDB(
   } catch (error) {
     console.error('TMDB 데이터 가져오기 실패:', error)
     return []
+  }
+}
+
+async function fetchTVShowById(tmdbId: number): Promise<TMDBMovie | null> {
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${TMDB_API_KEY}&language=ko-KR`
+    )
+
+    if (!response.ok) {
+      console.warn('[TMDB TV 상세 호출 실패]', {
+        tmdbId,
+        status: response.status,
+        statusText: response.statusText,
+      })
+      return null
+    }
+
+    const data = await response.json()
+    const genreIds = Array.isArray(data.genres)
+      ? data.genres.map((genre: TMDBGenre) => genre.id)
+      : []
+
+    const networks = Array.isArray(data.networks)
+      ? data.networks.map((network: { id: number; name: string }) => ({
+          id: network.id,
+          name: network.name,
+        }))
+      : undefined
+
+    const tvShow: TMDBMovie = {
+      id: data.id,
+      name: data.name,
+      original_name: data.original_name,
+      overview: data.overview,
+      poster_path: data.poster_path,
+      backdrop_path: data.backdrop_path,
+      first_air_date: data.first_air_date,
+      last_air_date: data.last_air_date,
+      vote_average: data.vote_average,
+      vote_count: data.vote_count,
+      popularity: data.popularity,
+      genre_ids: genreIds,
+      original_language: data.original_language,
+      production_countries: data.production_countries,
+      number_of_seasons: data.number_of_seasons,
+      number_of_episodes: data.number_of_episodes,
+      networks,
+    }
+
+    return tvShow
+  } catch (error) {
+    console.error(`[TMDB] TV 상세 정보 가져오기 실패 (ID: ${tmdbId})`, error)
+    return null
   }
 }
 
@@ -512,11 +565,18 @@ async function getGenreMaps(genreType: 'movie' | 'tv') {
  * 콘텐츠를 Supabase에 저장 (최적화 버전)
  * [수정] 장르 맵을 인자로 받아 중복 API 호출 제거
  */
+interface SaveContentOptions {
+  forceSaveOTT?: boolean
+  forceMoodTags?: boolean
+}
+
 async function saveContentToSupabase(
   movie: TMDBMovie,
   selectedGenre: string,
   genreMapKo: Record<number, string>,
-  genreMapEn: Record<number, string>
+  genreMapEn: Record<number, string>,
+  moodIds: string[] = [],
+  options: SaveContentOptions = {}
 ): Promise<Content | null> {
   try {
     // [기존 로직] 콘텐츠 타입 결정 (selectedGenre 우선)
@@ -531,17 +591,27 @@ async function saveContentToSupabase(
     }
 
     // [최적화] 상세정보와 OTT 정보를 병렬로 호출
-    const [details, ottProviders] = await Promise.all([
+    const [details, rawOttProviders] = await Promise.all([
       getContentDetailsFromTMDB(movie.id, contentType),
       getWatchProvidersFromTMDB(movie.id, contentType)
     ]);
+    let ottProviders = rawOttProviders;
     
     const imdbId = details?.imdbId || null;
 
     // [필터링] OTT 제공자가 없으면 저장하지 않음 (시청 불가능한 콘텐츠 제외)
-    if (!ottProviders || ottProviders.length === 0) {
+    if ((!ottProviders || ottProviders.length === 0) && !options.forceSaveOTT) {
       console.log(`[OTT 없음] 저장 건너뜀: ${movie.title || movie.name} (ID: ${movie.id})`);
       return null;
+    }
+
+    if ((!ottProviders || ottProviders.length === 0) && options.forceSaveOTT) {
+      ottProviders = [
+        {
+          provider_id: -1,
+          provider_name: '수동 추가',
+        },
+      ];
     }
 
     // [추가] 임베딩 생성 (줄거리를 벡터로 변환)
@@ -621,8 +691,41 @@ async function saveContentToSupabase(
     // 번역 적용
     allTags = allTags.map(tag => tagTranslation[tag] || tag);
     
-    // [추가] 중복 제거 (번역 후)
+    // [무드 태그] 선택된 무드를 기반으로 태그 추가 (예: 공포, 스릴러)
+    const moodTagOrder: string[] = []
+
+    if (Array.isArray(moodIds) && moodIds.length > 0) {
+      const moodTagsToAdd = new Set<string>()
+      moodIds.forEach((moodId) => {
+        const relatedGenres = MOOD_TO_TMDB_GENRE[moodId] || []
+        const hasMatchingGenre =
+          relatedGenres.length === 0 ||
+          relatedGenres.some((genreId) => movie.genre_ids?.includes(genreId))
+
+        if (options.forceMoodTags || hasMatchingGenre) {
+          const moodDerivedTags = moodsToImdbTags([moodId])
+          moodDerivedTags.forEach((tag) => {
+            moodTagsToAdd.add(tag)
+            if (!moodTagOrder.includes(tag)) {
+              moodTagOrder.push(tag)
+            }
+          })
+        }
+      })
+
+      if (moodTagsToAdd.size > 0) {
+        allTags = [...allTags, ...moodTagsToAdd]
+      }
+    }
+
+    // [추가] 중복 제거 (번역 및 무드 태그 적용 후)
     allTags = [...new Set(allTags)];
+
+    if (moodTagOrder.length > 0) {
+      const orderedMoodTags = moodTagOrder.filter((tag) => allTags.includes(tag))
+      const otherTags = allTags.filter((tag) => !orderedMoodTags.includes(tag))
+      allTags = [...orderedMoodTags, ...otherTags]
+    }
 
     // [개선] 태그에서 장르 추론 및 정리
     const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID;
@@ -727,7 +830,7 @@ async function saveContentToSupabase(
       genre: contentGenre,
       tags: allTags,
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
-      ott_providers: ottProviders.length > 0 ? ottProviders : undefined,
+      ott_providers: ottProviders && ottProviders.length > 0 ? ottProviders : undefined,
       vector: embedding, // 임베딩 벡터 추가 (null 가능)
     };
 
@@ -819,7 +922,7 @@ export async function fetchAndSaveRecommendations(
 
     // 3. [최적화] 20개 콘텐츠 저장을 병렬로 실행
     const savePromises = movies.map(movie => 
-      saveContentToSupabase(movie, genre, genreMapKo, genreMapEn)
+      saveContentToSupabase(movie, genre, genreMapKo, genreMapEn, moods)
     );
     
     const savedContents = (await Promise.all(savePromises)).filter(Boolean) as Content[];
@@ -832,6 +935,60 @@ export async function fetchAndSaveRecommendations(
   } catch (error) {
     console.error('추천 콘텐츠 가져오기 실패:', error);
     return [];
+  }
+}
+
+export async function importSpecificTVShows(
+  tmdbIds: number[],
+  moodIds: string[] = []
+): Promise<Content[]> {
+  try {
+    if (!tmdbIds || tmdbIds.length === 0) {
+      console.warn('[특정 TV 수집] tmdbIds가 비어 있음')
+      return []
+    }
+
+    const uniqueIds = Array.from(new Set(tmdbIds.filter(Boolean)))
+    if (uniqueIds.length === 0) {
+      console.warn('[특정 TV 수집] 유효한 tmdbId 없음')
+      return []
+    }
+
+    const { genreMapKo, genreMapEn } = await getGenreMaps('tv')
+
+    const results: Content[] = []
+
+    for (const tmdbId of uniqueIds) {
+      const tvShow = await fetchTVShowById(tmdbId)
+      if (!tvShow) {
+        console.warn(`[특정 TV 수집] TMDB ID ${tmdbId} 상세 정보 없음`)
+        continue
+      }
+
+      const saved = await saveContentToSupabase(
+        tvShow,
+        '드라마',
+        genreMapKo,
+        genreMapEn,
+        moodIds,
+        {
+          forceSaveOTT: true,
+          forceMoodTags: true,
+        }
+      )
+
+      if (saved) {
+        results.push(saved)
+        console.log(`[특정 TV 수집] 저장 완료: ${saved.title} (ID: ${tmdbId})`)
+      } else {
+        console.warn(`[특정 TV 수집] 저장 실패: TMDB ID ${tmdbId}`)
+      }
+    }
+
+    return results
+  } catch (error) {
+    console.error('[특정 TV 수집 실패]', error)
+    return []
   }
 }
 

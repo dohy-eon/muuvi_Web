@@ -54,7 +54,7 @@ export const MOOD_TO_TMDB_GENRE: Record<string, number[]> = {
  */
 export const MOOD_TO_TMDB_KEYWORDS: Record<string, number[]> = {
   '01': [1744, 972], // Romance - romantic, love
-  '02': [2099, 969], // Horror - horror, scary
+  '02': [2099, 969, 9712, 18038, 974], // Horror - horror, scary, ghost, supernatural, mystery
   '03': [971], // Comedy - comedy, funny
   '04': [2091, 2092], // SF - science fiction, futuristic
   '05': [9725, 2093], // Fantasy - fantasy, magical
