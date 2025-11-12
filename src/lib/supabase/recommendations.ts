@@ -175,6 +175,29 @@ export async function getRecommendations(
 }
 
 /**
+ * 콘텐츠 ID로 상세 정보 가져오기
+ */
+export async function getContentById(id: string): Promise<Content | null> {
+  try {
+    const { data, error } = await supabase
+      .from('contents')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('콘텐츠 조회 실패:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('콘텐츠 조회 중 오류:', error)
+    return null
+  }
+}
+
+/**
  * IMDB 데이터를 Supabase에 동기화하는 함수
  * (백엔드에서 주기적으로 실행하거나 Edge Function으로 구현)
  */
