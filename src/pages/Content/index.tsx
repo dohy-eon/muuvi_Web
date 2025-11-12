@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content } from '../../types'
@@ -30,16 +30,12 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
-// OTT 제공자 타입 필터
-type OTTFilterType = 'flatrate' | 'free' | 'rent' | 'buy'
-
 export default function Content() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [content, setContent] = useState<Content | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ottFilter, setOttFilter] = useState<OTTFilterType>('flatrate')
 
   useEffect(() => {
     const loadContent = async () => {
@@ -112,24 +108,26 @@ export default function Content() {
   }
 
   return (
-    <div className="w-full min-h-[812px] bg-white relative font-pretendard overflow-y-auto">
-      {/* 뒤로가기 버튼 */}
-      <button
-        onClick={() => navigate(-1)}
-        className="absolute top-[65px] left-5 z-20 w-6 h-6 flex items-center justify-center"
-        aria-label="뒤로가기"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-6 h-6"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
+    <div className="w-full h-[812px] bg-white relative font-pretendard flex flex-col overflow-hidden">
+      {/* 스크롤 가능한 콘텐츠 영역 */}
+      <div className="flex-1 overflow-y-auto pb-20">
+        {/* 뒤로가기 버튼 */}
+        <button
+          onClick={() => navigate(-1)}
+          className="absolute top-[65px] left-5 z-20 w-6 h-6 flex items-center justify-center"
+          aria-label="뒤로가기"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-6 h-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
 
       {/* 메인 포스터 배경 (378px 높이) */}
       <div className="relative w-full h-[378px] overflow-hidden">
@@ -364,7 +362,7 @@ export default function Content() {
       </div>
 
       {/* 영상 및 포스터 콜라주 섹션 */}
-      <div className="px-5 mb-24">
+      <div className="px-5 mb-6">
         <h2 className="text-[16px] font-semibold text-black mb-4">영상 및 포스터 콜라주</h2>
         
         {/* 그리드 레이아웃 */}
@@ -389,8 +387,14 @@ export default function Content() {
           </div>
         </div>
       </div>
+      </div>
 
-      <BottomNavigation />
+      {/* Sticky 하단 네비게이션 */}
+      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+        <div className="pointer-events-auto">
+          <BottomNavigation />
+        </div>
+      </div>
     </div>
   )
 }
