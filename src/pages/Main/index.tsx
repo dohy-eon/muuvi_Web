@@ -111,10 +111,9 @@ export default function Main() {
   }
 
   return (
-    <div className="w-full h-[812px] relative bg-white overflow-hidden font-pretendard">
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
+    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+      {/* 스크롤 가능한 콘텐츠 영역 */}
+      <div className="flex-1 overflow-y-auto bg-white relative">
 
       {/* Selection Info Card */}
       {(displayGenre || moodNames) && (
@@ -233,6 +232,14 @@ export default function Main() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* Sticky 하단 네비게이션 */}
+      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+        <div className="pointer-events-auto">
+          <BottomNavigation />
+        </div>
+      </div>
     </div>
   )
 }

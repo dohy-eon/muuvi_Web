@@ -21,7 +21,7 @@ export default function BottomNavigation() {
     <div className="w-full h-14 relative overflow-visible flex items-center justify-center gap-3">
       {/* 프로필 탭 (왼쪽) */}
       <button
-        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/30 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
+        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
           isActive('/mypage') ? 'bg-white/40' : ''
         }`}
         onClick={() => navigate('/mypage')}
@@ -35,7 +35,7 @@ export default function BottomNavigation() {
 
       {/* 홈 탭 (가운데) */}
       <button
-        className={`w-28 h-14 rounded-[40px] backdrop-blur-md bg-white/30 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
+        className={`w-28 h-14 rounded-[40px] backdrop-blur-md bg-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
           isActive('/main') || isActive('/') ? 'bg-white/40' : ''
         }`}
         onClick={() => navigate('/main')}
@@ -49,7 +49,7 @@ export default function BottomNavigation() {
 
       {/* 콘텐츠 탭 (오른쪽) */}
       <button
-        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/30 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
+        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.1),inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] border border-white/20 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/40 ${
           isPrefixActive('/content') ? 'bg-white/40' : ''
         }`}
         onClick={() => navigate('/content')}

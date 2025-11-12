@@ -16,7 +16,7 @@ export default function App() {
           className="w-full min-h-screen flex justify-center"
           style={{ backgroundColor: '#2e2c6a' }}
         >
-          <div className="w-full max-w-[375px] min-h-screen bg-white relative">
+          <div className="w-full max-w-[375px] min-h-screen relative">
             <AuthProvider>
               <Routes>
                 <Route path="/splash" element={<Splash />} />

@@ -63,35 +63,43 @@ function LoginPrompt() {
   }
 
   return (
-    <div className="w-full h-[812px] bg-white relative font-pretendard">
-      <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center">
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <img
-            src={MuuviLogoPrimary}
-            alt="Muuvi"
-            className="w-[128px] h-auto"
-          />
-        </div>
+    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+      {/* 스크롤 가능한 콘텐츠 영역 */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center">
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <img
+              src={MuuviLogoPrimary}
+              alt="Muuvi"
+              className="w-[128px] h-auto"
+            />
+          </div>
 
-        <div className="w-full px-6 pb-[120px]">
-          {errorMessage && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm whitespace-pre-line">
-              {errorMessage}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={isLoading}
-            className="w-full bg-white border border-[#E3E3E3] rounded-[12px] py-[14px] px-6 flex items-center justify-center gap-3 text-[#101010] text-base font-semibold shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            <img src={GoogleLogo} alt="Google" className="w-6 h-6" />
-            <span>{isLoading ? '로그인 중...' : 'Google로 로그인'}</span>
-          </button>
+          <div className="w-full px-6 pb-[120px]">
+            {errorMessage && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm whitespace-pre-line">
+                {errorMessage}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+              className="w-full bg-white border border-[#E3E3E3] rounded-[12px] py-[14px] px-6 flex items-center justify-center gap-3 text-[#101010] text-base font-semibold shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <img src={GoogleLogo} alt="Google" className="w-6 h-6" />
+              <span>{isLoading ? '로그인 중...' : 'Google로 로그인'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <BottomNavigation />
+      {/* Sticky 하단 네비게이션 */}
+      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+        <div className="pointer-events-auto">
+          <BottomNavigation />
+        </div>
+      </div>
     </div>
   )
 }
@@ -104,14 +112,23 @@ export default function MyPage() {
   }
 
   return (
-    <div className="w-full h-[812px] bg-white relative font-pretendard">
-      <div className="px-6 pt-24">
-        <h1 className="text-2xl font-semibold text-[#101010]">마이페이지</h1>
-        <p className="mt-4 text-base text-gray-600">
-          {user.email ?? '로그인된 사용자'}
-        </p>
+    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+      {/* 스크롤 가능한 콘텐츠 영역 */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className="px-6 pt-24">
+          <h1 className="text-2xl font-semibold text-[#101010]">마이페이지</h1>
+          <p className="mt-4 text-base text-gray-600">
+            {user.email ?? '로그인된 사용자'}
+          </p>
+        </div>
       </div>
-      <BottomNavigation />
+
+      {/* Sticky 하단 네비게이션 */}
+      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+        <div className="pointer-events-auto">
+          <BottomNavigation />
+        </div>
+      </div>
     </div>
   )
 }
