@@ -2,7 +2,7 @@
  * 무드 ID를 한글 장르/태그로 매핑
  */
 export const moodToImdbTags: Record<string, string[]> = {
-  '01': ['로맨스', '드라마'], // Romance
+  '01': ['로맨스'], // Romance
   '02': ['공포', '스릴러'], // Horror
   '03': ['코미디'], // Comedy
   '04': ['SF'], // SF
