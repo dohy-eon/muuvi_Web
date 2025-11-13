@@ -1014,7 +1014,7 @@ export async function fetchAndSaveRecommendations(
 ): Promise<Content[]> {
   try {
     // 1. TMDB에서 콘텐츠 목록 가져오기
-    const movies = await fetchMoviesFromTMDB(genre, moods, 50); // 수집 목표량 증가 (20 -> 50)
+    const movies = await fetchMoviesFromTMDB(genre, moods, 200); // 최대 200개까지 검색 (10페이지 × 20개)
     if (!movies || movies.length === 0) {
         console.log(`[${genre}+${moods}] TMDB 검색 결과 없음`);
         return [];
