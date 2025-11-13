@@ -3,6 +3,7 @@ import { useRecoilValue } from 'recoil'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { userState } from '../../recoil/userState'
+import { addFavorite, removeFavorite, getFavorites, getFavoriteCount } from '../../lib/supabase/favorites'
 import BottomNavigation from '../../components/BottomNavigation'
 import MuuviLogoPrimary from '../../assets/MuuviLogoPrimary.svg'
 import GoogleLogo from '../../assets/googleLogo.svg'
@@ -127,9 +128,11 @@ interface FavoriteContentCardProps {
   content: Content
 }
 
-function FavoriteContentCard({ content }: FavoriteContentCardProps) {
+function FavoriteContentCard({ content, onRemove }: FavoriteContentCardProps & { onRemove?: () => void }) {
   const navigate = useNavigate()
-  const [isLiked, setIsLiked] = useState(false)
+  const user = useRecoilValue(userState)
+  const [isLiked, setIsLiked] = useState(true) // 마이페이지에서는 이미 좋아요한 콘텐츠만 표시
+  const [isLoading, setIsLoading] = useState(false)
 
   const genreTags = content.tags && content.tags.length > 0 
     ? content.tags
@@ -146,10 +149,36 @@ function FavoriteContentCard({ content }: FavoriteContentCardProps) {
     }
   }
 
-  const handleLikeClick = (e: React.MouseEvent) => {
+  const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation() // 카드 클릭 이벤트 전파 방지
-    setIsLiked(!isLiked)
-    // TODO: 좋아요 상태를 데이터베이스에 저장하는 로직 추가 필요
+    
+    if (!user || !content.id) return
+
+    setIsLoading(true)
+    const newLikedState = !isLiked
+    setIsLiked(newLikedState) // 낙관적 업데이트
+
+    try {
+      if (newLikedState) {
+        const success = await addFavorite(user.id, content.id)
+        if (!success) {
+          setIsLiked(false) // 실패 시 롤백
+        }
+      } else {
+        const success = await removeFavorite(user.id, content.id)
+        if (!success) {
+          setIsLiked(true) // 실패 시 롤백
+        } else {
+          // 좋아요 취소 성공 시 목록에서 제거
+          onRemove?.()
+        }
+      }
+    } catch (error) {
+      console.error('좋아요 처리 실패:', error)
+      setIsLiked(!newLikedState) // 에러 시 롤백
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -171,52 +200,13 @@ function FavoriteContentCard({ content }: FavoriteContentCardProps) {
       {/* 그라데이션 오버레이 */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80" />
       
-      {/* 좋아요 아이콘 (우측 상단) */}
-      <button
-        onClick={handleLikeClick}
-        className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center z-10"
-        aria-label={isLiked ? '좋아요 취소' : '좋아요'}
-      >
-        <img 
-          src={isLiked ? LikeCheckedIcon : LikeIcon} 
-          alt={isLiked ? '좋아요 취소' : '좋아요'}
-          className="w-8 h-8"
-        />
-      </button>
-
-      {/* 제목 영역 (하단 배경) */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[#f1f0fa] h-[23px] flex items-center justify-center">
-        <p className="text-[14px] font-normal text-[#2e2c6a] text-center leading-[1.5]">
-          {content.title}
-        </p>
-      </div>
-
-      {/* 장르 태그들 (제목 영역 바로 위) */}
-      {genreTags.length > 0 && (
-        <div className="absolute left-2.5 bottom-[27px] flex gap-1">
-          {genreTags.map((tag, tagIndex) => {
-            const tagColor = genreTagColors[tag] || genreTagColors['default']
-            return (
-              <div
-                key={tagIndex}
-                className={`h-5 ${tagColor} rounded-[6px] px-2 flex items-center justify-center`}
-              >
-                <span className="text-[10px] font-normal text-white whitespace-nowrap">
-                  {tag}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* OTT 로고들 (장르 태그 위) */}
+      {/* OTT 로고들 (좌측 상단) */}
       {content.ott_providers && content.ott_providers.length > 0 && (
-        <div className="absolute left-2.5 bottom-[35px] flex gap-1">
+        <div className="absolute top-2 left-2.5 flex gap-1 z-20">
           {content.ott_providers.slice(0, 2).map((provider, index) => (
             <div
               key={provider.provider_id || index}
-              className="w-6 h-6 rounded overflow-hidden"
+              className="w-6 h-6 rounded overflow-hidden bg-white/10 backdrop-blur-sm"
             >
               {provider.logo_path ? (
                 <img
@@ -233,6 +223,48 @@ function FavoriteContentCard({ content }: FavoriteContentCardProps) {
           ))}
         </div>
       )}
+
+      {/* 좋아요 아이콘 (우측 상단) */}
+      {user && (
+        <button
+          onClick={handleLikeClick}
+          disabled={isLoading}
+          className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center z-10 disabled:opacity-50"
+          aria-label={isLiked ? '좋아요 취소' : '좋아요'}
+        >
+          <img 
+            src={isLiked ? LikeCheckedIcon : LikeIcon} 
+            alt={isLiked ? '좋아요 취소' : '좋아요'}
+            className="w-8 h-8"
+          />
+        </button>
+      )}
+
+      {/* 제목 영역 (하단 배경) */}
+      <div className="absolute bottom-0 left-0 right-0 bg-[#f1f0fa] h-[23px] flex items-center justify-center">
+        <p className="text-[14px] font-normal text-[#2e2c6a] text-center leading-[1.5]">
+          {content.title}
+        </p>
+      </div>
+
+      {/* 장르 태그들 (제목 영역 바로 위) */}
+      {genreTags.length > 0 && (
+        <div className="absolute left-2.5 bottom-[32px] flex gap-1 z-10">
+          {genreTags.map((tag, tagIndex) => {
+            const tagColor = genreTagColors[tag] || genreTagColors['default']
+            return (
+              <div
+                key={tagIndex}
+                className={`h-5 ${tagColor} rounded-[6px] px-2 flex items-center justify-center`}
+              >
+                <span className="text-[10px] font-normal text-white whitespace-nowrap">
+                  {tag}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -244,14 +276,29 @@ export default function MyPage() {
   const [subscribedServiceCount, setSubscribedServiceCount] = useState(0)
   const [favoriteContents, setFavoriteContents] = useState<Content[]>([])
 
-  // TODO: 실제 데이터베이스에서 찜한 콘텐츠와 통계를 가져오는 로직 구현 필요
+  // 좋아요한 콘텐츠와 통계 가져오기
   useEffect(() => {
-    // 임시로 빈 데이터로 설정
-    // 나중에 Supabase에서 실제 데이터를 가져오도록 구현
-    setFavoriteCount(2)
-    setNotInterestedCount(0)
-    setSubscribedServiceCount(0)
-    setFavoriteContents([])
+    const loadFavorites = async () => {
+      if (!user) {
+        setFavoriteCount(0)
+        setFavoriteContents([])
+        return
+      }
+
+      try {
+        const [favorites, count] = await Promise.all([
+          getFavorites(user.id),
+          getFavoriteCount(user.id)
+        ])
+        
+        setFavoriteContents(favorites)
+        setFavoriteCount(count)
+      } catch (error) {
+        console.error('좋아요 목록 로드 실패:', error)
+      }
+    }
+
+    loadFavorites()
   }, [user])
 
   if (!user) {
@@ -332,7 +379,15 @@ export default function MyPage() {
           {favoriteContents.length > 0 ? (
             <div className="flex gap-4">
               {favoriteContents.map((content) => (
-                <FavoriteContentCard key={content.id} content={content} />
+                <FavoriteContentCard 
+                  key={content.id} 
+                  content={content}
+                  onRemove={() => {
+                    // 좋아요 취소 시 목록에서 제거
+                    setFavoriteContents(prev => prev.filter(c => c.id !== content.id))
+                    setFavoriteCount(prev => Math.max(0, prev - 1))
+                  }}
+                />
               ))}
             </div>
           ) : (
