@@ -140,6 +140,95 @@ async function getTypedOttProviders(
   }
 }
 
+// TMDB API로 출연진/제작진 정보 가져오기
+async function getCastAndCrew(
+  imdbId: string | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<{
+  cast: Array<{ id: number; name: string; character: string; profile_path: string | null }>
+  director: string | null
+  writer: string | null
+}> {
+  if (!imdbId || !TMDB_API_KEY) {
+    return { cast: [], director: null, writer: null }
+  }
+
+  try {
+    const tmdbId = await getTMDBId(imdbId, contentType)
+    if (!tmdbId) {
+      return { cast: [], director: null, writer: null }
+    }
+
+    const endpoint = contentType === 'tv' ? 'tv' : 'movie'
+    const response = await fetch(
+      `${TMDB_BASE_URL}/${endpoint}/${tmdbId}/credits?api_key=${TMDB_API_KEY}&language=ko-KR`
+    )
+
+    if (!response.ok) {
+      return { cast: [], director: null, writer: null }
+    }
+
+    const data = await response.json()
+    
+    // 출연진 (최대 6명)
+    const castList = (data.cast || [])
+      .slice(0, 6)
+      .map((actor: any) => ({
+        id: actor.id,
+        name: actor.name || '',
+        character: actor.character || actor.roles?.[0]?.character || '',
+        profile_path: actor.profile_path
+          ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
+          : null,
+      }))
+
+    // 감독 찾기
+    let directorName: string | null = null
+    const director = (data.crew || []).find(
+      (person: any) => person.job === 'Director' || person.job === 'Executive Producer'
+    )
+    if (director) {
+      directorName = director.name
+    }
+
+    // 극본가 찾기 (Writer, Screenplay, Story 등)
+    let writerName: string | null = null
+    const writer = (data.crew || []).find(
+      (person: any) =>
+        person.job === 'Writer' ||
+        person.job === 'Screenplay' ||
+        person.job === 'Story' ||
+        person.job === 'Novel'
+    )
+    if (writer) {
+      writerName = writer.name
+    } else {
+      // 여러 명의 작가가 있을 수 있으므로 첫 번째 작가 찾기
+      const writers = (data.crew || []).filter(
+        (person: any) =>
+          person.job === 'Writer' ||
+          person.job === 'Screenplay' ||
+          person.job === 'Story'
+      )
+      if (writers.length > 0) {
+        writerName = writers[0].name
+        if (writers.length > 1) {
+          writerName += ` 외 ${writers.length - 1}명`
+        }
+      }
+    }
+
+    return {
+      cast: castList,
+      director: directorName,
+      writer: writerName,
+    }
+  } catch (error) {
+    console.error('출연진/제작진 정보 가져오기 실패:', error)
+    return { cast: [], director: null, writer: null }
+  }
+}
+
 // TMDB API로 연령 등급과 러닝타임 가져오기
 async function getContentRatingAndRuntime(
   imdbId: string | undefined,
@@ -274,6 +363,9 @@ export default function Content() {
   const [ageRating, setAgeRating] = useState<string | null>(null)
   const [runtime, setRuntime] = useState<string | null>(null)
   const [isBackgroundDark, setIsBackgroundDark] = useState(true) // 기본값: 어두운 배경 (포스터가 있을 가능성이 높음)
+  const [cast, setCast] = useState<Array<{ id: number; name: string; character: string; profile_path: string | null }>>([])
+  const [director, setDirector] = useState<string | null>(null)
+  const [writer, setWriter] = useState<string | null>(null)
 
   useEffect(() => {
     const loadContent = async () => {
@@ -293,15 +385,19 @@ export default function Content() {
         } else {
           setContent(data)
           
-          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임 가져오기
+          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임, 출연진/제작진 가져오기
           const contentType = data.genre === '영화' ? 'movie' : 'tv'
-          const [typedProviders, ratingAndRuntime] = await Promise.all([
+          const [typedProviders, ratingAndRuntime, castAndCrew] = await Promise.all([
             getTypedOttProviders(data.imdb_id, contentType),
-            getContentRatingAndRuntime(data.imdb_id, contentType)
+            getContentRatingAndRuntime(data.imdb_id, contentType),
+            getCastAndCrew(data.imdb_id, contentType)
           ])
           setOttProviders(typedProviders)
           setAgeRating(ratingAndRuntime.rating)
           setRuntime(ratingAndRuntime.runtime)
+          setCast(castAndCrew.cast)
+          setDirector(castAndCrew.director)
+          setWriter(castAndCrew.writer)
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
@@ -692,45 +788,82 @@ export default function Content() {
       <div className="px-5 mb-6">
         <h2 className="text-[16px] font-semibold text-black mb-4">출연진/제작진</h2>
         
-        {/* 출연진 그리드 (3열) */}
-        <div className="flex gap-[43px] mb-4 overflow-x-auto">
-          {/* Placeholder 출연진 카드들 */}
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex-shrink-0 flex flex-col items-center">
-              <div className="w-20 h-20 rounded-full bg-gray-300 mb-2" />
-              <div className="bg-gray-900 rounded-[10px] px-1.5 py-0.5 mb-1">
-                <span className="text-[14px] font-normal text-white">이름</span>
+        {/* 출연진 그리드 */}
+        {cast.length > 0 ? (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-4 mb-4">
+            {cast.map((actor) => (
+              <div key={actor.id} className="flex flex-col items-center min-w-0 max-w-[100px] mx-auto">
+                {/* 프로필 이미지 */}
+                <div className="w-20 h-20 rounded-full bg-gray-300 mb-2 overflow-hidden flex items-center justify-center flex-shrink-0">
+                  {actor.profile_path ? (
+                    <img
+                      src={actor.profile_path}
+                      alt={actor.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
+                      }}
+                    />
+                  ) : null}
+                </div>
+                {/* 배역명 */}
+                <div className="bg-gray-900 rounded-[10px] px-1.5 py-0.5 mb-1 w-full min-w-0">
+                  <span 
+                    className="text-[14px] font-normal text-white block truncate text-center"
+                    title={actor.character || '출연'}
+                  >
+                    {actor.character || '출연'}
+                  </span>
+                </div>
+                {/* 배우명 */}
+                <span 
+                  className="text-[14px] font-normal text-gray-900 text-center w-full truncate block min-w-0"
+                  title={actor.name}
+                >
+                  {actor.name}
+                </span>
               </div>
-              <span className="text-[14px] font-normal text-gray-900">본명</span>
-            </div>
-          ))}
-        </div>
-        
-        <div className="flex gap-[48px] mb-4 overflow-x-auto">
-          {[4, 5, 6].map((i) => (
-            <div key={i} className="flex-shrink-0 flex flex-col items-center">
-              <div className="w-20 h-20 rounded-full bg-gray-300 mb-2" />
-              <div className="bg-gray-900 rounded-[10px] px-1.5 py-0.5 mb-1">
-                <span className="text-[14px] font-normal text-white">이름</span>
-              </div>
-              <span className="text-[14px] font-normal text-gray-900">본명</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[14px] font-normal text-gray-500 text-center py-4">
+            출연진 정보가 없습니다.
+          </div>
+        )}
         
         {/* 구분선 */}
         <div className="w-full h-[1px] border-t border-[#2e2c6a] my-4" />
         
         {/* 감독/극본 */}
         <div className="space-y-4">
-          <div>
-            <span className="text-[16px] font-normal text-black">감독</span>
-            <span className="text-[16px] font-normal text-[#7a8dd6] ml-4">감독이름</span>
-          </div>
-          <div>
-            <span className="text-[16px] font-normal text-black">극본</span>
-            <span className="text-[16px] font-normal text-[#7a8dd6] ml-4">극본가이름</span>
-          </div>
+          {director && (
+            <div className="flex items-start gap-4">
+              <span className="text-[16px] font-normal text-black flex-shrink-0">감독</span>
+              <span 
+                className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
+                title={director}
+              >
+                {director}
+              </span>
+            </div>
+          )}
+          {writer && (
+            <div className="flex items-start gap-4">
+              <span className="text-[16px] font-normal text-black flex-shrink-0">극본</span>
+              <span 
+                className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
+                title={writer}
+              >
+                {writer}
+              </span>
+            </div>
+          )}
+          {!director && !writer && (
+            <div className="text-[14px] font-normal text-gray-500">
+              제작진 정보가 없습니다.
+            </div>
+          )}
         </div>
         
         {/* 더보기 버튼 */}
