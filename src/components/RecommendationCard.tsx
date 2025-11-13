@@ -90,7 +90,7 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
           {content.ott_providers.slice(0, 6).map((provider, index) => (
             <div
               key={provider.provider_id || index}
-              className="w-6 h-6 rounded overflow-hidden bg-white/20 backdrop-blur-sm flex items-center justify-center"
+              className="w-6 h-6 rounded overflow-hidden bg-white/5 backdrop-blur-sm flex items-center justify-center"
             >
               {provider.logo_path ? (
                 <img

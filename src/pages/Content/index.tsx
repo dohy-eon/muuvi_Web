@@ -140,6 +140,91 @@ async function getTypedOttProviders(
   }
 }
 
+// TMDB API로 영상 및 이미지 정보 가져오기
+async function getVideosAndImages(
+  imdbId: string | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>> {
+  if (!imdbId || !TMDB_API_KEY) {
+    return []
+  }
+
+  try {
+    const tmdbId = await getTMDBId(imdbId, contentType)
+    if (!tmdbId) {
+      return []
+    }
+
+    const endpoint = contentType === 'tv' ? 'tv' : 'movie'
+    
+    // videos와 images를 병렬로 가져오기
+    const [videosResponse, imagesResponse] = await Promise.all([
+      fetch(`${TMDB_BASE_URL}/${endpoint}/${tmdbId}/videos?api_key=${TMDB_API_KEY}&language=ko-KR`),
+      fetch(`${TMDB_BASE_URL}/${endpoint}/${tmdbId}/images?api_key=${TMDB_API_KEY}`)
+    ])
+
+    const mediaItems: Array<{ type: 'video' | 'image'; url: string; thumbnail: string }> = []
+
+    // 비디오 처리 (Trailer, Teaser 등)
+    if (videosResponse.ok) {
+      const videosData = await videosResponse.json()
+      const videos = (videosData.results || []).filter(
+        (video: any) => 
+          video.type === 'Trailer' || 
+          video.type === 'Teaser' || 
+          video.type === 'Clip'
+      ).slice(0, 3) // 최대 3개
+
+      videos.forEach((video: any) => {
+        if (video.key) {
+          mediaItems.push({
+            type: 'video',
+            url: `https://www.youtube.com/watch?v=${video.key}`,
+            thumbnail: video.key 
+              ? `https://img.youtube.com/vi/${video.key}/hqdefault.jpg`
+              : ''
+          })
+        }
+      })
+    }
+
+    // 이미지 처리 (backdrops와 posters)
+    if (imagesResponse.ok) {
+      const imagesData = await imagesResponse.json()
+      
+      // Backdrops (배경 이미지) - 최대 4개
+      const backdrops = (imagesData.backdrops || []).slice(0, 4)
+      backdrops.forEach((backdrop: any) => {
+        if (backdrop.file_path) {
+          mediaItems.push({
+            type: 'image',
+            url: `https://image.tmdb.org/t/p/original${backdrop.file_path}`,
+            thumbnail: `https://image.tmdb.org/t/p/w500${backdrop.file_path}`
+          })
+        }
+      })
+
+      // Posters (포스터) - 최대 2개
+      const posters = (imagesData.posters || []).slice(0, 2)
+      posters.forEach((poster: any) => {
+        if (poster.file_path) {
+          mediaItems.push({
+            type: 'image',
+            url: `https://image.tmdb.org/t/p/original${poster.file_path}`,
+            thumbnail: `https://image.tmdb.org/t/p/w500${poster.file_path}`
+          })
+        }
+      })
+    }
+
+    // 총 9개까지 제한 (콜라주 레이아웃에 맞춤)
+    return mediaItems.slice(0, 9)
+  } catch (error) {
+    console.error('영상/이미지 정보 가져오기 실패:', error)
+    return []
+  }
+}
+
 // TMDB API로 출연진/제작진 정보 가져오기
 async function getCastAndCrew(
   imdbId: string | undefined,
@@ -366,6 +451,7 @@ export default function Content() {
   const [cast, setCast] = useState<Array<{ id: number; name: string; character: string; profile_path: string | null }>>([])
   const [director, setDirector] = useState<string | null>(null)
   const [writer, setWriter] = useState<string | null>(null)
+  const [mediaItems, setMediaItems] = useState<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>>([])
 
   useEffect(() => {
     const loadContent = async () => {
@@ -385,12 +471,13 @@ export default function Content() {
         } else {
           setContent(data)
           
-          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임, 출연진/제작진 가져오기
+          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임, 출연진/제작진, 영상/이미지 가져오기
           const contentType = data.genre === '영화' ? 'movie' : 'tv'
-          const [typedProviders, ratingAndRuntime, castAndCrew] = await Promise.all([
+          const [typedProviders, ratingAndRuntime, castAndCrew, videosAndImages] = await Promise.all([
             getTypedOttProviders(data.imdb_id, contentType),
             getContentRatingAndRuntime(data.imdb_id, contentType),
-            getCastAndCrew(data.imdb_id, contentType)
+            getCastAndCrew(data.imdb_id, contentType),
+            getVideosAndImages(data.imdb_id, contentType)
           ])
           setOttProviders(typedProviders)
           setAgeRating(ratingAndRuntime.rating)
@@ -398,6 +485,7 @@ export default function Content() {
           setCast(castAndCrew.cast)
           setDirector(castAndCrew.director)
           setWriter(castAndCrew.writer)
+          setMediaItems(videosAndImages)
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
@@ -876,27 +964,158 @@ export default function Content() {
       <div className="px-5 mb-6">
         <h2 className="text-[16px] font-semibold text-black mb-4">영상 및 포스터 콜라주</h2>
         
-        {/* 그리드 레이아웃 */}
-        <div className="space-y-2">
-          {/* 첫 번째 행 */}
-          <div className="flex gap-2">
-            <div className="h-20 w-[200px] bg-gray-300 rounded" />
-            <div className="h-20 w-[127px] bg-gray-300 rounded" />
+        {mediaItems.length > 0 ? (
+          <div className="space-y-3">
+            {/* 첫 번째 행 (2개) */}
+            {mediaItems.length > 0 && (
+              <div className="flex gap-3">
+                {mediaItems.slice(0, 2).map((item, index) => {
+                  const widths = [300, 190]
+                  return (
+                    <div
+                      key={index}
+                      className="h-32 rounded overflow-hidden cursor-pointer relative group"
+                      style={{ width: `${widths[index]}px` }}
+                      onClick={() => {
+                        if (item.type === 'video') {
+                          window.open(item.url, '_blank')
+                        } else {
+                          // 이미지 클릭 시 확대 (선택사항)
+                          window.open(item.url, '_blank')
+                        }
+                      }}
+                    >
+                      <img
+                        src={item.thumbnail}
+                        alt={item.type === 'video' ? '비디오' : '포스터'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = ''
+                          target.style.backgroundColor = '#d1d5db'
+                        }}
+                      />
+                      {item.type === 'video' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
+                          <svg
+                            className="w-10 h-10 text-white"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {mediaItems.length < 2 && (
+                  <div className="h-32 w-[190px] bg-gray-300 rounded" />
+                )}
+              </div>
+            )}
+            
+            {/* 두 번째 행 (2개) */}
+            {mediaItems.length > 2 && (
+              <div className="flex gap-3">
+                {mediaItems.slice(2, 4).map((item, index) => (
+                  <div
+                    key={index + 2}
+                    className="h-32 w-[210px] rounded overflow-hidden cursor-pointer relative group"
+                    style={{ width: '210px' }}
+                    onClick={() => {
+                      if (item.type === 'video') {
+                        window.open(item.url, '_blank')
+                      } else {
+                        window.open(item.url, '_blank')
+                      }
+                    }}
+                  >
+                    <img
+                      src={item.thumbnail}
+                      alt={item.type === 'video' ? '비디오' : '포스터'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = ''
+                        target.style.backgroundColor = '#d1d5db'
+                      }}
+                    />
+                    {item.type === 'video' && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
+                        <svg
+                          className="w-10 h-10 text-white"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {mediaItems.length < 4 && (
+                  <div className="h-32 w-[210px] bg-gray-300 rounded" />
+                )}
+              </div>
+            )}
+            
+            {/* 세 번째 행 (3개) */}
+            {mediaItems.length > 4 && (
+              <div className="flex gap-3">
+                {mediaItems.slice(4, 7).map((item, index) => {
+                  const widths = [144, 147, 188]
+                  return (
+                    <div
+                      key={index + 4}
+                      className="h-32 rounded overflow-hidden cursor-pointer relative group"
+                      style={{ width: `${widths[index]}px` }}
+                      onClick={() => {
+                        if (item.type === 'video') {
+                          window.open(item.url, '_blank')
+                        } else {
+                          window.open(item.url, '_blank')
+                        }
+                      }}
+                    >
+                      <img
+                        src={item.thumbnail}
+                        alt={item.type === 'video' ? '비디오' : '포스터'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = ''
+                          target.style.backgroundColor = '#d1d5db'
+                        }}
+                      />
+                      {item.type === 'video' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors">
+                          <svg
+                            className="w-8 h-8 text-white"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {mediaItems.length < 7 && (
+                  <>
+                    {mediaItems.length === 5 && <div className="h-32 w-[147px] bg-gray-300 rounded" />}
+                    {mediaItems.length === 6 && <div className="h-32 w-[188px] bg-gray-300 rounded" />}
+                  </>
+                )}
+              </div>
+            )}
           </div>
-          
-          {/* 두 번째 행 */}
-          <div className="flex gap-2">
-            <div className="h-20 w-[140px] bg-gray-300 rounded" />
-            <div className="h-20 w-[140px] bg-gray-300 rounded" />
+        ) : (
+          <div className="text-[14px] font-normal text-gray-500 text-center py-4">
+            영상 및 포스터 정보가 없습니다.
           </div>
-          
-          {/* 세 번째 행 */}
-          <div className="flex gap-2">
-            <div className="h-20 w-[96px] bg-gray-300 rounded" />
-            <div className="h-20 w-[98px] bg-gray-300 rounded" />
-            <div className="h-20 w-[125px] bg-gray-300 rounded" />
-          </div>
-        </div>
+        )}
       </div>
       </div>
 
