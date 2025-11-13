@@ -1,8 +1,129 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getContentById } from '../../lib/supabase/recommendations'
-import type { Content } from '../../types'
+import type { Content, OTTProvider } from '../../types'
 import BottomNavigation from '../../components/BottomNavigation'
+
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+
+interface TMDBWatchProvider {
+  provider_id: number
+  provider_name: string
+  logo_path: string
+}
+
+interface TMDBWatchProvidersResponse {
+  results: {
+    KR?: {
+      flatrate?: TMDBWatchProvider[]
+      buy?: TMDBWatchProvider[]
+      rent?: TMDBWatchProvider[]
+      free?: TMDBWatchProvider[]
+    }
+  }
+}
+
+// TMDB API로 타입별 OTT 제공자 정보 가져오기
+async function getTypedOttProviders(
+  imdbId: string | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<OTTProvider[]> {
+  if (!imdbId || !TMDB_API_KEY) return []
+
+  try {
+    // IMDB ID로 TMDB ID 찾기
+    const findResponse = await fetch(
+      `${TMDB_BASE_URL}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
+    )
+    
+    if (!findResponse.ok) return []
+    
+    const findData = await findResponse.json()
+    const tmdbId = contentType === 'tv' 
+      ? findData.tv_results?.[0]?.id 
+      : findData.movie_results?.[0]?.id
+    
+    if (!tmdbId) return []
+
+    // OTT 제공자 정보 가져오기
+    const endpoint = contentType === 'tv'
+      ? `${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers`
+      : `${TMDB_BASE_URL}/movie/${tmdbId}/watch/providers`
+    
+    const response = await fetch(`${endpoint}?api_key=${TMDB_API_KEY}`)
+    
+    if (!response.ok) return []
+    
+    const data: TMDBWatchProvidersResponse = await response.json()
+    const krProviders = data.results?.KR
+    
+    if (!krProviders) return []
+    
+    const allProviders: OTTProvider[] = []
+    
+    // 정액제 (flatrate)
+    if (krProviders.flatrate) {
+      krProviders.flatrate.forEach((provider) => {
+        allProviders.push({
+          provider_id: provider.provider_id,
+          provider_name: provider.provider_name,
+          logo_path: provider.logo_path
+            ? `https://image.tmdb.org/t/p/w300${provider.logo_path}`
+            : undefined,
+          type: 'flatrate',
+        })
+      })
+    }
+    
+    // 무료 (free)
+    if (krProviders.free) {
+      krProviders.free.forEach((provider) => {
+        allProviders.push({
+          provider_id: provider.provider_id,
+          provider_name: provider.provider_name,
+          logo_path: provider.logo_path
+            ? `https://image.tmdb.org/t/p/w300${provider.logo_path}`
+            : undefined,
+          type: 'free',
+        })
+      })
+    }
+    
+    // 대여 (rent)
+    if (krProviders.rent) {
+      krProviders.rent.forEach((provider) => {
+        allProviders.push({
+          provider_id: provider.provider_id,
+          provider_name: provider.provider_name,
+          logo_path: provider.logo_path
+            ? `https://image.tmdb.org/t/p/w300${provider.logo_path}`
+            : undefined,
+          type: 'rent',
+        })
+      })
+    }
+    
+    // 구매 (buy)
+    if (krProviders.buy) {
+      krProviders.buy.forEach((provider) => {
+        allProviders.push({
+          provider_id: provider.provider_id,
+          provider_name: provider.provider_name,
+          logo_path: provider.logo_path
+            ? `https://image.tmdb.org/t/p/w300${provider.logo_path}`
+            : undefined,
+          type: 'buy',
+        })
+      })
+    }
+    
+    return allProviders
+  } catch (error) {
+    console.error('OTT 정보 가져오기 실패:', error)
+    return []
+  }
+}
 
 // 장르/태그 색상 매핑 (RecommendationCard와 동일)
 const genreTagColors: Record<string, string> = {
@@ -30,12 +151,16 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
+type OttFilterType = 'flatrate' | 'free' | 'rent' | 'buy' | null
+
 export default function Content() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [content, setContent] = useState<Content | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ottProviders, setOttProviders] = useState<OTTProvider[]>([])
+  const [selectedFilter, setSelectedFilter] = useState<OttFilterType>(null)
 
   useEffect(() => {
     const loadContent = async () => {
@@ -54,6 +179,11 @@ export default function Content() {
           setError('콘텐츠를 찾을 수 없습니다.')
         } else {
           setContent(data)
+          
+          // TMDB API로 타입별 OTT 정보 가져오기
+          const contentType = data.genre === '영화' ? 'movie' : 'tv'
+          const typedProviders = await getTypedOttProviders(data.imdb_id, contentType)
+          setOttProviders(typedProviders)
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
@@ -76,8 +206,21 @@ export default function Content() {
         .slice(0, 2) // 최대 2개만 표시
     : []
 
-  // OTT 제공자 필터링 (현재는 모든 제공자 표시, 나중에 필터 타입별로 분리 가능)
-  const filteredOttProviders = content?.ott_providers || []
+  // 타입별 OTT 제공자 개수 계산
+  const flatrateCount = ottProviders.filter(p => p.type === 'flatrate').length
+  const freeCount = ottProviders.filter(p => p.type === 'free').length
+  const rentCount = ottProviders.filter(p => p.type === 'rent').length
+  const buyCount = ottProviders.filter(p => p.type === 'buy').length
+
+  // 필터링된 OTT 제공자
+  const filteredOttProviders = selectedFilter
+    ? ottProviders.filter(p => p.type === selectedFilter)
+    : ottProviders
+
+  // 필터 클릭 핸들러
+  const handleFilterClick = useCallback((filterType: OttFilterType) => {
+    setSelectedFilter(prev => prev === filterType ? null : filterType)
+  }, [])
 
   if (isLoading) {
     return (
@@ -165,7 +308,7 @@ export default function Content() {
           {/* OTT 아이콘 및 장르 태그 */}
           <div className="flex items-center justify-center gap-2 mb-2">
             {/* OTT 제공자 아이콘 (작은 원형) */}
-            {filteredOttProviders.slice(0, 2).map((provider, index) => (
+            {(selectedFilter ? filteredOttProviders : ottProviders).slice(0, 2).map((provider, index) => (
               <div
                 key={provider.provider_id || index}
                 className="w-5 h-5 rounded-[6px] overflow-hidden"
@@ -271,18 +414,40 @@ export default function Content() {
         
         {/* OTT 필터 (정액제, 무료, 대여, 구매) */}
         <div className="flex items-center gap-6 mb-4">
-          <div className="flex items-center gap-1">
-            <div className="w-[55px] h-[1px] border-b border-[#2e2c6a]" />
-            <p className="text-[16px] font-normal text-black">정액제 2</p>
-          </div>
-          <p className="text-[16px] font-normal text-black">무료 0</p>
-          <p className="text-[16px] font-normal text-black">대여 4</p>
-          <p className="text-[16px] font-normal text-black">구매 4</p>
+          <button
+            onClick={() => handleFilterClick('flatrate')}
+            className={`flex flex-col items-center gap-1 ${selectedFilter === 'flatrate' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
+          >
+            <p className="text-[16px] font-normal text-black">정액제 {flatrateCount}</p>
+            <div className={`w-[55px] h-[2px] border-b ${selectedFilter === 'flatrate' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
+          </button>
+          <button
+            onClick={() => handleFilterClick('free')}
+            className={`flex flex-col items-center gap-1 ${selectedFilter === 'free' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
+          >
+            <p className="text-[16px] font-normal text-black">무료 {freeCount}</p>
+            <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'free' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
+          </button>
+          <button
+            onClick={() => handleFilterClick('rent')}
+            className={`flex flex-col items-center gap-1 ${selectedFilter === 'rent' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
+          >
+            <p className="text-[16px] font-normal text-black">대여 {rentCount}</p>
+            <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'rent' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
+          </button>
+          <button
+            onClick={() => handleFilterClick('buy')}
+            className={`flex flex-col items-center gap-1 ${selectedFilter === 'buy' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
+          >
+            <p className="text-[16px] font-normal text-black">구매 {buyCount}</p>
+            <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'buy' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
+          </button>
         </div>
         
         {/* OTT 제공자 버튼들 */}
         <div className="space-y-3">
-          {filteredOttProviders.slice(0, 2).map((provider, index) => (
+          {filteredOttProviders.length > 0 ? (
+            filteredOttProviders.map((provider, index) => (
             <button
               key={provider.provider_id || index}
               className="w-full h-9 border border-[#2e2c6a] rounded-[12px] flex items-center justify-between px-2 hover:bg-gray-50 transition-colors"
@@ -314,7 +479,14 @@ export default function Content() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-          ))}
+            ))
+          ) : (
+            <p className="text-[14px] font-normal text-gray-500 text-center py-4">
+              {selectedFilter 
+                ? '해당 타입으로 시청 가능한 플랫폼이 없습니다.'
+                : '시청 가능한 플랫폼이 없습니다.'}
+            </p>
+          )}
         </div>
       </div>
 
