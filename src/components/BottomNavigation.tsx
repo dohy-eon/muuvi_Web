@@ -18,11 +18,11 @@ export default function BottomNavigation() {
   }
 
   return (
-    <div className="w-full h-14 left-0 top-[722px] absolute overflow-hidden">
+    <div className="w-full h-14 relative overflow-visible flex items-center justify-center gap-3">
       {/* 프로필 탭 (왼쪽) */}
-      <div
-        className={`w-16 h-14 left-[39px] top-0 absolute rounded-[40px] shadow-[inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] overflow-hidden cursor-pointer flex items-center justify-center ${
-          isActive('/mypage') ? '' : ''
+      <button
+        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0px_0px_4px_0px_rgba(0,0,0,0.05)] border border-white/5 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/10 ${
+          isActive('/mypage') ? 'bg-white/10' : ''
         }`}
         onClick={() => navigate('/mypage')}
       >
@@ -31,11 +31,13 @@ export default function BottomNavigation() {
           alt="profile"
           className="w-[18px] h-[18px]"
         />
-      </div>
+      </button>
 
       {/* 홈 탭 (가운데) */}
-      <div
-        className={`w-28 h-14 left-[127px] top-0 absolute rounded-[40px] shadow-[inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] overflow-hidden cursor-pointer flex items-center justify-center`}
+      <button
+        className={`w-28 h-14 rounded-[40px] backdrop-blur-md bg-white/3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0px_0px_4px_0px_rgba(0,0,0,0.05)] border border-white/5 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/10 ${
+          isActive('/main') || isActive('/') ? 'bg-white/10' : ''
+        }`}
         onClick={() => navigate('/main')}
       >
         <img
@@ -43,21 +45,21 @@ export default function BottomNavigation() {
           alt="home"
           className="w-[18px] h-[18px]"
         />
-      </div>
+      </button>
 
       {/* 콘텐츠 탭 (오른쪽) */}
-      <div
-        className={`w-16 h-14 left-[263px] top-0 absolute rounded-[40px] shadow-[inset_0px_0px_4px_0px_rgba(0,0,0,0.25)] overflow-hidden cursor-pointer flex items-center justify-center ${
-          isPrefixActive('/content') ? '' : ''
+      <button
+        className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0px_0px_4px_0px_rgba(0,0,0,0.05)] border border-white/5 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/10 ${
+          isPrefixActive('/content') ? 'bg-white/10' : ''
         }`}
-        
+        onClick={() => navigate('/content')}
       >
         <img
           src={isPrefixActive('/content') ? contentSelected : contentsUnselected}
           alt="contents"
           className="w-[18px] h-[18px]"
         />
-      </div>
+      </button>
     </div>
   )
 }

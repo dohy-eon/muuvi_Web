@@ -9,6 +9,7 @@ export interface OTTProvider {
   provider_id: number
   provider_name: string
   logo_path?: string
+  type?: 'flatrate' | 'rent' | 'buy' | 'free' // OTT 제공 타입
 }
 
 // 콘텐츠 타입
