@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useRecoilValue, useSetRecoilState } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
 import RecommendationLoading from '../../components/RecommendationLoading'
+import SimpleLoading from '../../components/SimpleLoading'
 import RecommendationCard from '../../components/RecommendationCard'
 import BottomNavigation from '../../components/BottomNavigation'
 import type { Content, Profile } from '../../types'
@@ -27,14 +28,19 @@ const moodIdToKorean: Record<string, string> = {
 
 export default function Main() {
   const navigate = useNavigate()
+  const location = useLocation()
   const setOnboardingData = useSetRecoilState(onboardingDataState)
   const [recommendations, setRecommendations] = useState<Content[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false) // 온보딩에서 넘어올 때만 true
+  const [showSimpleLoading, setShowSimpleLoading] = useState(false) // 마이페이지에서 넘어올 때 사용
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
   const [recommendEnabled, setRecommendEnabled] = useState(true)
   // 현재 표시 중인 카드의 인덱스 상태
   const [currentIndex, setCurrentIndex] = useState(0)
+  // 이전 경로를 추적하기 위한 ref
+  const prevPathRef = useRef<string | null>(null)
 
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
@@ -46,7 +52,17 @@ export default function Main() {
   }
 
   const loadRecommendations = useCallback(async (forceRefresh: boolean = false) => {
-      setIsLoading(true)
+      // 이미 추천 데이터가 있고, 온보딩 데이터가 없고, 강제 새로고침이 아닌 경우에는 로드하지 않음
+      if (!forceRefresh && recommendations.length > 0 && !onboardingData) {
+        setIsLoading(false)
+        setShowSimpleLoading(false)
+        setShowLoadingScreen(false)
+        return
+      }
+
+      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시 (useEffect에서 이미 설정됨)
+      const shouldShowLoading = onboardingData && !forceRefresh && recommendations.length === 0
+
       try {
         // 임시 user_id (실제로는 인증된 사용자 ID 사용)
         const userId = 'temp-user-id'
@@ -73,20 +89,57 @@ export default function Main() {
       } catch (error) {
         console.error('추천 콘텐츠 로드 실패:', error)
       } finally {
-        setIsLoading(false)
+        // 로딩 완료 처리
+        if (shouldShowLoading) {
+          setIsLoading(false)
+          setShowLoadingScreen(false)
+        }
+        setShowSimpleLoading(false)
       }
-  }, [onboardingData])
+  }, [onboardingData, recommendations.length])
 
   const handleRerecommend = () => {
     void loadRecommendations(true)
   }
 
   useEffect(() => {
-    loadRecommendations()
-  }, [loadRecommendations])
+    const currentPath = location.pathname
+    // sessionStorage에서 이전 경로 가져오기
+    const prevPath = sessionStorage.getItem('prevPath') || prevPathRef.current
+    
+    // 추천 데이터가 없을 때만 로딩 화면 표시
+    if (recommendations.length === 0) {
+      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시
+      if (prevPath?.includes('/onboarding')) {
+        setShowLoadingScreen(true)
+        setIsLoading(true)
+        setShowSimpleLoading(false)
+      } else {
+        // 마이페이지에서 넘어온 경우 또는 다른 경로에서 넘어온 경우 간단한 로딩 화면 표시
+        setShowSimpleLoading(true)
+        setShowLoadingScreen(false)
+        setIsLoading(false)
+      }
+    }
+    
+    // 이전 경로 저장 (다음 렌더링을 위해)
+    prevPathRef.current = currentPath
+    sessionStorage.setItem('prevPath', currentPath)
+    
+    // 데이터 로드 시작
+    void loadRecommendations()
+  }, [loadRecommendations, recommendations.length, location.pathname])
 
-  if (isLoading) {
+  // 로딩 화면 우선순위: 상세 로딩 > 간단한 로딩
+  // 온보딩에서 넘어올 때 상세 로딩 화면 표시
+  if (isLoading && showLoadingScreen) {
     return <RecommendationLoading profile={profile} onboardingData={onboardingData} />
+  }
+
+  // 마이페이지에서 넘어올 때 간단한 로딩 화면 표시
+  // (상세 로딩이 아닐 때만)
+  if (showSimpleLoading) {
+    return <SimpleLoading />
   }
 
   // 프로필이 있으면 프로필 사용, 없으면 온보딩 데이터 사용
@@ -204,7 +257,12 @@ export default function Main() {
       )}
 
       {/* Recommendation Cards -> Slider Container */}
-      {recommendations.length === 0 ? (
+      {isLoading ? (
+        // 로딩 중일 때는 아무것도 표시하지 않음 (또는 로딩 인디케이터)
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
+          {/* 로딩 중... */}
+        </div>
+      ) : recommendations.length === 0 ? (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
           추천 콘텐츠가 없습니다.
         </div>

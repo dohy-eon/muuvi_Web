@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content, OTTProvider } from '../../types'
 import BottomNavigation from '../../components/BottomNavigation'
+import SimpleLoading from '../../components/SimpleLoading'
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -601,18 +602,7 @@ export default function Content() {
   }, [content?.poster_url, calculateImageBrightness])
 
   if (isLoading) {
-    return (
-      <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
-        <div className="flex items-center justify-center h-full bg-white">
-          <div className="text-gray-600">로딩 중...</div>
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
-          <div className="pointer-events-auto">
-            <BottomNavigation />
-          </div>
-        </div>
-      </div>
-    )
+    return <SimpleLoading />
   }
 
   if (error || !content) {

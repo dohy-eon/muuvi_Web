@@ -38,7 +38,11 @@ export default function BottomNavigation() {
         className={`w-28 h-14 rounded-[40px] backdrop-blur-md bg-white/3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0px_0px_4px_0px_rgba(0,0,0,0.05)] border border-white/5 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/10 ${
           isActive('/main') || isActive('/') ? 'bg-white/10' : ''
         }`}
-        onClick={() => navigate('/main')}
+        onClick={() => {
+          // 메인으로 이동하기 전에 현재 경로를 저장
+          sessionStorage.setItem('prevPath', location.pathname)
+          navigate('/main')
+        }}
       >
         <img
           src={isActive('/main') || isActive('/') ? homeSelected : homeUnselected}

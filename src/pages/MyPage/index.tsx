@@ -6,7 +6,8 @@ import { userState } from '../../recoil/userState'
 import BottomNavigation from '../../components/BottomNavigation'
 import MuuviLogoPrimary from '../../assets/MuuviLogoPrimary.svg'
 import GoogleLogo from '../../assets/googleLogo.svg'
-import MLogo from '../../assets/M.svg'
+import LikeIcon from './like.svg'
+import LikeCheckedIcon from './likeChecked.svg'
 import type { Content } from '../../types'
 
 function LoginPrompt() {
@@ -128,6 +129,7 @@ interface FavoriteContentCardProps {
 
 function FavoriteContentCard({ content }: FavoriteContentCardProps) {
   const navigate = useNavigate()
+  const [isLiked, setIsLiked] = useState(false)
 
   const genreTags = content.tags && content.tags.length > 0 
     ? content.tags
@@ -142,6 +144,12 @@ function FavoriteContentCard({ content }: FavoriteContentCardProps) {
     if (content.id) {
       navigate(`/content/${content.id}`)
     }
+  }
+
+  const handleLikeClick = (e: React.MouseEvent) => {
+    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
+    setIsLiked(!isLiked)
+    // TODO: 좋아요 상태를 데이터베이스에 저장하는 로직 추가 필요
   }
 
   return (
@@ -163,13 +171,18 @@ function FavoriteContentCard({ content }: FavoriteContentCardProps) {
       {/* 그라데이션 오버레이 */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80" />
       
-      {/* 하트 아이콘 (우측 상단) */}
-      <div className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="16" cy="16" r="15" fill="#2E2C6A" stroke="white" strokeWidth="2"/>
-          <path d="M16 22C16 22 11 18 11 14.5C11 12.5 12.5 11 14.5 11C15.5 11 16.5 11.5 17 12C17.5 11.5 18.5 11 19.5 11C21.5 11 23 12.5 23 14.5C23 18 18 22 16 22Z" fill="white"/>
-        </svg>
-      </div>
+      {/* 좋아요 아이콘 (우측 상단) */}
+      <button
+        onClick={handleLikeClick}
+        className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center z-10"
+        aria-label={isLiked ? '좋아요 취소' : '좋아요'}
+      >
+        <img 
+          src={isLiked ? LikeCheckedIcon : LikeIcon} 
+          alt={isLiked ? '좋아요 취소' : '좋아요'}
+          className="w-8 h-8"
+        />
+      </button>
 
       {/* 제목 영역 (하단 배경) */}
       <div className="absolute bottom-0 left-0 right-0 bg-[#f1f0fa] h-[23px] flex items-center justify-center">

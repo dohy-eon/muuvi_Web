@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
- 
+import LikeIcon from '../pages/MyPage/like.svg'
+import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
 
 interface RecommendationCardProps {
   content: Content
@@ -37,6 +39,7 @@ const genreTagColors: Record<string, string> = {
 
 export default function RecommendationCard({ content }: RecommendationCardProps) {
   const navigate = useNavigate()
+  const [isLiked, setIsLiked] = useState(false)
   
   // 실제 장르 태그 사용 (최대 2개)
   // content.tags에서 실제 TMDB 장르를 가져옴
@@ -56,6 +59,12 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
     }
   }
 
+  const handleLikeClick = (e: React.MouseEvent) => {
+    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
+    setIsLiked(!isLiked)
+    // TODO: 좋아요 상태를 데이터베이스에 저장하는 로직 추가 필요
+  }
+
   return (
     <div
       className="w-72 h-96 relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0"
@@ -66,6 +75,19 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
         <img src={content.poster_url} alt={content.title} className="absolute inset-0 w-full h-full object-cover" />
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/90" />
+
+      {/* 좋아요 아이콘 (우측 상단) */}
+      <button
+        onClick={handleLikeClick}
+        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center z-10"
+        aria-label={isLiked ? '좋아요 취소' : '좋아요'}
+      >
+        <img 
+          src={isLiked ? LikeCheckedIcon : LikeIcon} 
+          alt={isLiked ? '좋아요 취소' : '좋아요'}
+          className="w-8 h-8"
+        />
+      </button>
 
             {/* 제목/정보 - 좌하단 정렬 */}
             <div className="absolute left-8 bottom-20 text-left text-white">
