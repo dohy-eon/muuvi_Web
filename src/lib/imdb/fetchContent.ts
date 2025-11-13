@@ -137,16 +137,31 @@ async function fetchMoviesFromTMDB(
     })
 
     // 1. [장르 필터] 적용
-    // '영화'는 엔드포인트(/discover/movie) 자체로 필터링됩니다.
-    // '예능'은 아래 'with_type'으로만 필터링됩니다 (장르 ID 없음).
-    // '드라마', '애니메이션'만 with_genres에 ID를 명시적으로 추가합니다.
-    const selectedGenreId = genre !== '영화' && genre !== '예능' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
+    const genreIdsToFilter = new Set<number>()
 
+    // '드라마', '애니메이션'은 GENRE_TO_TMDB_ID에서 ID를 가져와 추가
+    const selectedGenreId = genre !== '영화' && genre !== '예능' && GENRE_TO_TMDB_ID[genre] ? GENRE_TO_TMDB_ID[genre] : null
+    
     if (selectedGenreId && (genre === '드라마' || genre === '애니메이션')) {
-      params.append('with_genres', selectedGenreId.toString())
-      console.log('[장르 필터 적용]', { genre, genreId: selectedGenreId })
+      genreIdsToFilter.add(selectedGenreId)
+    }
+
+    // '영화' (isTV=false)의 경우, 무드에서 파생된 장르 ID(MOOD_TO_TMDB_GENRE)를 사용
+    // (예: 로맨스 무드 '01' -> 장르 ID 10749)
+    if (!isTV && moodParams.genres && moodParams.genres.length > 0) {
+      moodParams.genres.forEach(id => genreIdsToFilter.add(id))
+      console.log('[무드 기반 장르 필터 적용]', { genre, moodGenreIds: moodParams.genres })
+    }
+
+    // '예능'은 with_type으로 필터링되므로 여기서는 추가 ID 없음
+
+    // 수집된 장르 ID가 있으면 params에 추가 (여러 개일 경우 OR 조건 '|')
+    if (genreIdsToFilter.size > 0) {
+      const genreIdString = Array.from(genreIdsToFilter).join('|')
+      params.append('with_genres', genreIdString)
+      console.log('[장르 필터 적용]', { genre, genreIds: genreIdString })
     } else {
-      console.log('[장르 필터] 없음 (영화 또는 예능)', { genre })
+      console.log('[장르 필터] 없음 (영화+무드조합없음 또는 예능)', { genre })
     }
 
     // 2. [무드 필터] 적용 (키워드 기반)
