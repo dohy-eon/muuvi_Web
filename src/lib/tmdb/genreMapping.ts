@@ -68,7 +68,7 @@ export const MOOD_TO_TMDB_KEYWORDS: Record<string, number[]> = {
  * 무드 ID를 정렬 기준으로 매핑
  */
 export const MOOD_TO_SORT_BY: Record<string, string> = {
-  '01': 'vote_average.desc', // Romance - 높은 평점
+  '01': 'popularity.desc', // Romance - (수정) 인기순으로 변경
   '02': 'popularity.desc', // Horror - 인기
   '03': 'popularity.desc', // Comedy - 인기
   '04': 'vote_average.desc', // SF - 높은 평점
