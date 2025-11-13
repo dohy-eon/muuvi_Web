@@ -331,7 +331,7 @@ async function fetchMoviesFromTMDB(
     // [최적화] 결과가 부족하면 여러 페이지 검색
     let allResults = data.results || []
     let currentPage = 1
-    const maxPages = 3 // 최대 3페이지까지 검색
+    const maxPages = 10 // 최대 10페이지까지 검색 (더 많은 영화를 검색하기 위해 3 -> 10으로 증가)
     
     while (allResults.length < limit && currentPage < maxPages && data.total_pages > currentPage) {
       currentPage++
@@ -1014,7 +1014,7 @@ export async function fetchAndSaveRecommendations(
 ): Promise<Content[]> {
   try {
     // 1. TMDB에서 콘텐츠 목록 가져오기
-    const movies = await fetchMoviesFromTMDB(genre, moods, 20);
+    const movies = await fetchMoviesFromTMDB(genre, moods, 50); // 수집 목표량 증가 (20 -> 50)
     if (!movies || movies.length === 0) {
         console.log(`[${genre}+${moods}] TMDB 검색 결과 없음`);
         return [];
