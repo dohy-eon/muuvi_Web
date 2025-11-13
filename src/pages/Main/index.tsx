@@ -7,6 +7,7 @@ import { getRecommendations } from '../../lib/supabase/recommendations'
 import RecommendationLoading from '../../components/RecommendationLoading'
 import SimpleLoading from '../../components/SimpleLoading'
 import RecommendationCard from '../../components/RecommendationCard'
+import NotInterestedToast from '../../components/NotInterestedToast'
 import BottomNavigation from '../../components/BottomNavigation'
 import type { Content, Profile } from '../../types'
 import Reload from '../../assets/reload.svg'
@@ -41,6 +42,8 @@ export default function Main() {
   const [currentIndex, setCurrentIndex] = useState(0)
   // 이전 경로를 추적하기 위한 ref
   const prevPathRef = useRef<string | null>(null)
+  // 관심없음 토스트 표시 상태
+  const [showNotInterestedToast, setShowNotInterestedToast] = useState(false)
 
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
@@ -163,8 +166,37 @@ export default function Main() {
     }
   }
 
+  // 관심없음 핸들러
+  const handleNotInterested = (contentId: string) => {
+    // 추천 목록에서 해당 콘텐츠 제거
+    setRecommendations((prev) => prev.filter((content) => content.id !== contentId))
+    
+    // 현재 인덱스 조정 (제거된 항목이 현재 인덱스보다 앞에 있으면 인덱스 감소)
+    setCurrentIndex((prev) => {
+      const removedIndex = recommendations.findIndex((c) => c.id === contentId)
+      if (removedIndex < prev) {
+        return prev - 1
+      }
+      if (removedIndex === prev && prev >= recommendations.length - 1) {
+        return Math.max(0, prev - 1)
+      }
+      return prev
+    })
+
+    // 토스트 표시
+    setShowNotInterestedToast(true)
+    
+    // 3초 후 토스트 숨김
+    setTimeout(() => {
+      setShowNotInterestedToast(false)
+    }, 3000)
+  }
+
   return (
     <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+      {/* 관심없음 토스트 */}
+      <NotInterestedToast isVisible={showNotInterestedToast} />
+      
       {/* 스크롤 가능한 콘텐츠 영역 */}
       <div className="flex-1 overflow-y-auto bg-white relative">
 
@@ -285,6 +317,7 @@ export default function Main() {
               <RecommendationCard 
                 key={content.id} 
                 content={content}
+                onNotInterested={handleNotInterested}
               />
             ))}
           </div>
