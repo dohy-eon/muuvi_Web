@@ -24,6 +24,32 @@ interface TMDBWatchProvidersResponse {
   }
 }
 
+// TMDB ID 가져오기 (IMDB ID로)
+async function getTMDBId(
+  imdbId: string | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<number | null> {
+  if (!imdbId || !TMDB_API_KEY) return null
+
+  try {
+    const findResponse = await fetch(
+      `${TMDB_BASE_URL}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
+    )
+    
+    if (!findResponse.ok) return null
+    
+    const findData = await findResponse.json()
+    const tmdbId = contentType === 'tv' 
+      ? findData.tv_results?.[0]?.id 
+      : findData.movie_results?.[0]?.id
+    
+    return tmdbId || null
+  } catch (error) {
+    console.error('TMDB ID 가져오기 실패:', error)
+    return null
+  }
+}
+
 // TMDB API로 타입별 OTT 제공자 정보 가져오기
 async function getTypedOttProviders(
   imdbId: string | undefined,
@@ -32,18 +58,7 @@ async function getTypedOttProviders(
   if (!imdbId || !TMDB_API_KEY) return []
 
   try {
-    // IMDB ID로 TMDB ID 찾기
-    const findResponse = await fetch(
-      `${TMDB_BASE_URL}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
-    )
-    
-    if (!findResponse.ok) return []
-    
-    const findData = await findResponse.json()
-    const tmdbId = contentType === 'tv' 
-      ? findData.tv_results?.[0]?.id 
-      : findData.movie_results?.[0]?.id
-    
+    const tmdbId = await getTMDBId(imdbId, contentType)
     if (!tmdbId) return []
 
     // OTT 제공자 정보 가져오기
@@ -125,6 +140,101 @@ async function getTypedOttProviders(
   }
 }
 
+// TMDB API로 연령 등급과 러닝타임 가져오기
+async function getContentRatingAndRuntime(
+  imdbId: string | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<{ rating: string | null; runtime: string | null }> {
+  if (!imdbId || !TMDB_API_KEY) {
+    return { rating: null, runtime: null }
+  }
+
+  try {
+    const tmdbId = await getTMDBId(imdbId, contentType)
+    if (!tmdbId) {
+      return { rating: null, runtime: null }
+    }
+
+    if (contentType === 'movie') {
+      // 영화: 상세 정보와 release_dates 가져오기
+      const [detailResponse, releaseDatesResponse] = await Promise.all([
+        fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${TMDB_API_KEY}&language=ko-KR`),
+        fetch(`${TMDB_BASE_URL}/movie/${tmdbId}/release_dates?api_key=${TMDB_API_KEY}`)
+      ])
+
+      if (!detailResponse.ok || !releaseDatesResponse.ok) {
+        return { rating: null, runtime: null }
+      }
+
+      const detailData = await detailResponse.json()
+      const releaseDatesData = await releaseDatesResponse.json()
+
+      // 한국의 연령 등급 찾기
+      let rating: string | null = null
+      const krReleaseDates = releaseDatesData.results?.find(
+        (result: any) => result.iso_3166_1 === 'KR'
+      )
+      if (krReleaseDates?.release_dates?.[0]?.certification) {
+        rating = krReleaseDates.release_dates[0].certification
+      }
+
+      // 러닝타임 (분 단위)
+      let runtime: string | null = null
+      if (detailData.runtime) {
+        const hours = Math.floor(detailData.runtime / 60)
+        const minutes = detailData.runtime % 60
+        if (hours > 0) {
+          runtime = `${hours}시간 ${minutes}분`
+        } else {
+          runtime = `${minutes}분`
+        }
+      }
+
+      return { rating, runtime }
+    } else {
+      // TV: 상세 정보와 content_ratings 가져오기
+      const [detailResponse, contentRatingsResponse] = await Promise.all([
+        fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${TMDB_API_KEY}&language=ko-KR`),
+        fetch(`${TMDB_BASE_URL}/tv/${tmdbId}/content_ratings?api_key=${TMDB_API_KEY}`)
+      ])
+
+      if (!detailResponse.ok || !contentRatingsResponse.ok) {
+        return { rating: null, runtime: null }
+      }
+
+      const detailData = await detailResponse.json()
+      const contentRatingsData = await contentRatingsResponse.json()
+
+      // 한국의 연령 등급 찾기
+      let rating: string | null = null
+      const krRating = contentRatingsData.results?.find(
+        (result: any) => result.iso_3166_1 === 'KR'
+      )
+      if (krRating?.rating) {
+        rating = krRating.rating
+      }
+
+      // 러닝타임 (episode_run_time의 첫 번째 값 사용)
+      let runtime: string | null = null
+      if (detailData.episode_run_time && detailData.episode_run_time.length > 0) {
+        const runtimeMinutes = detailData.episode_run_time[0]
+        const hours = Math.floor(runtimeMinutes / 60)
+        const minutes = runtimeMinutes % 60
+        if (hours > 0) {
+          runtime = `${hours}시간 ${minutes}분`
+        } else {
+          runtime = `${minutes}분`
+        }
+      }
+
+      return { rating, runtime }
+    }
+  } catch (error) {
+    console.error('연령 등급 및 러닝타임 가져오기 실패:', error)
+    return { rating: null, runtime: null }
+  }
+}
+
 // 장르/태그 색상 매핑 (RecommendationCard와 동일)
 const genreTagColors: Record<string, string> = {
   '로맨스': 'bg-[#ffbdbd]',
@@ -161,6 +271,9 @@ export default function Content() {
   const [error, setError] = useState<string | null>(null)
   const [ottProviders, setOttProviders] = useState<OTTProvider[]>([])
   const [selectedFilter, setSelectedFilter] = useState<OttFilterType>(null)
+  const [ageRating, setAgeRating] = useState<string | null>(null)
+  const [runtime, setRuntime] = useState<string | null>(null)
+  const [isBackgroundDark, setIsBackgroundDark] = useState(true) // 기본값: 어두운 배경 (포스터가 있을 가능성이 높음)
 
   useEffect(() => {
     const loadContent = async () => {
@@ -180,10 +293,15 @@ export default function Content() {
         } else {
           setContent(data)
           
-          // TMDB API로 타입별 OTT 정보 가져오기
+          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임 가져오기
           const contentType = data.genre === '영화' ? 'movie' : 'tv'
-          const typedProviders = await getTypedOttProviders(data.imdb_id, contentType)
+          const [typedProviders, ratingAndRuntime] = await Promise.all([
+            getTypedOttProviders(data.imdb_id, contentType),
+            getContentRatingAndRuntime(data.imdb_id, contentType)
+          ])
           setOttProviders(typedProviders)
+          setAgeRating(ratingAndRuntime.rating)
+          setRuntime(ratingAndRuntime.runtime)
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
@@ -221,6 +339,82 @@ export default function Content() {
   const handleFilterClick = useCallback((filterType: OttFilterType) => {
     setSelectedFilter(prev => prev === filterType ? null : filterType)
   }, [])
+
+  // 이미지 밝기 계산 함수 (상단 부분만 샘플링하여 뒤로가기 버튼 위치의 밝기 확인)
+  const calculateImageBrightness = useCallback((imageUrl: string) => {
+    const img = new Image()
+    // CORS 문제를 피하기 위해 crossOrigin 설정 (실패해도 fallback 사용)
+    img.crossOrigin = 'anonymous'
+    
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          setIsBackgroundDark(true) // 기본값
+          return
+        }
+
+        // 이미지 크기에 맞춰 캔버스 크기 설정
+        const maxWidth = 200 // 성능을 위해 작은 크기로 리사이즈
+        const maxHeight = 100
+        const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1)
+        
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+        // 상단 부분만 샘플링 (뒤로가기 버튼이 있는 위치)
+        const sampleHeight = Math.min(canvas.height * 0.3, 50) // 상단 30% 또는 최대 50px
+        const imageData = ctx.getImageData(0, 0, canvas.width, sampleHeight)
+        const data = imageData.data
+        let brightness = 0
+
+        // 샘플링하여 성능 최적화
+        const sampleStep = Math.max(1, Math.floor(data.length / 4 / 50)) // 약 50개 픽셀 샘플링
+        let sampledPixels = 0
+
+        for (let i = 0; i < data.length; i += 4 * sampleStep) {
+          const r = data[i]
+          const g = data[i + 1]
+          const b = data[i + 2]
+          // 상대적 밝기 계산 (0-255) - 인간의 눈에 맞춘 가중치
+          const pixelBrightness = (r * 299 + g * 587 + b * 114) / 1000
+          brightness += pixelBrightness
+          sampledPixels++
+        }
+
+        if (sampledPixels > 0) {
+          const averageBrightness = brightness / sampledPixels
+          // 128을 기준으로 어두운지 밝은지 판단
+          setIsBackgroundDark(averageBrightness < 128)
+        } else {
+          setIsBackgroundDark(true) // 기본값
+        }
+      } catch (error) {
+        // CORS 에러 등으로 인한 실패 시 기본값 사용
+        console.warn('이미지 밝기 계산 실패 (CORS 또는 기타 오류):', error)
+        setIsBackgroundDark(true) // 포스터가 있으면 보통 어두운 배경
+      }
+    }
+
+    img.onerror = () => {
+      // 이미지 로드 실패 시 기본값 (포스터가 있으면 어두운 배경으로 가정)
+      setIsBackgroundDark(true)
+    }
+
+    img.src = imageUrl
+  }, [])
+
+  // 포스터 이미지가 변경될 때마다 밝기 계산
+  useEffect(() => {
+    if (content?.poster_url) {
+      calculateImageBrightness(content.poster_url)
+    } else {
+      // 포스터가 없으면 밝은 배경으로 설정
+      setIsBackgroundDark(false)
+    }
+  }, [content?.poster_url, calculateImageBrightness])
 
   if (isLoading) {
     return (
@@ -265,12 +459,12 @@ export default function Content() {
         {/* 뒤로가기 버튼 */}
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-[65px] left-5 z-20 w-6 h-6 flex items-center justify-center"
+          className="absolute top-[20px] left-5 z-20 w-6 h-6 flex items-center justify-center"
           aria-label="뒤로가기"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="w-6 h-6"
+            className={`w-6 h-6 ${isBackgroundDark ? 'text-white' : 'text-black'}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -397,13 +591,17 @@ export default function Content() {
           {/* 연령등급 */}
           <div className="flex items-start">
             <p className="text-[14px] font-normal text-gray-700 w-[93px]">연령등급</p>
-            <p className="text-[14px] font-normal text-gray-900 flex-1">-</p>
+            <p className="text-[14px] font-normal text-gray-900 flex-1">
+              {ageRating || '-'}
+            </p>
           </div>
           
           {/* 러닝타임 */}
           <div className="flex items-start">
             <p className="text-[14px] font-normal text-gray-700 w-[93px]">러닝타임</p>
-            <p className="text-[14px] font-normal text-gray-900 flex-1">-</p>
+            <p className="text-[14px] font-normal text-gray-900 flex-1">
+              {runtime || '-'}
+            </p>
           </div>
         </div>
       </div>
