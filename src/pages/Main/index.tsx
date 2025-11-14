@@ -1,16 +1,20 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useRecoilValue, useSetRecoilState } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
+import { addNotInterested, getNotInterestedContentIds, removeNotInterested } from '../../lib/supabase/notInterested'
+import { userState } from '../../recoil/userState'
 import RecommendationLoading from '../../components/RecommendationLoading'
+import SimpleLoading from '../../components/SimpleLoading'
 import RecommendationCard from '../../components/RecommendationCard'
+import NotInterestedToast from '../../components/NotInterestedToast'
 import BottomNavigation from '../../components/BottomNavigation'
 import type { Content, Profile } from '../../types'
 import Reload from '../../assets/reload.svg'
-import RecommendActive from '../../assets/RecommendActive.svg'
 import RecommendInactive from '../../assets/RecommendInactive.svg'
+import RecommendActive from '../../assets/RecommendActive.svg'
 
 // 무드 ID를 한글 이름으로 매핑
 const moodIdToKorean: Record<string, string> = {
@@ -27,14 +31,30 @@ const moodIdToKorean: Record<string, string> = {
 
 export default function Main() {
   const navigate = useNavigate()
+  const location = useLocation()
   const setOnboardingData = useSetRecoilState(onboardingDataState)
+  const user = useRecoilValue(userState)
   const [recommendations, setRecommendations] = useState<Content[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false) // 온보딩에서 넘어올 때만 true
+  const [showSimpleLoading, setShowSimpleLoading] = useState(false) // 마이페이지에서 넘어올 때 사용
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
-  const [recommendEnabled, setRecommendEnabled] = useState(true)
   // 현재 표시 중인 카드의 인덱스 상태
   const [currentIndex, setCurrentIndex] = useState(0)
+  // 이전 경로를 추적하기 위한 ref
+  const prevPathRef = useRef<string | null>(null)
+  // 관심없음 토스트 표시 상태
+  const [showNotInterestedToast, setShowNotInterestedToast] = useState(false)
+  // 토스트 메시지 타입 ('notInterested': 관심없음, 'restored': 관심없음 취소)
+  const [toastMessage, setToastMessage] = useState<'notInterested' | 'restored'>('notInterested')
+  // 관심없음으로 표시된 콘텐츠 ID 목록
+  const [notInterestedIds, setNotInterestedIds] = useState<Set<string>>(new Set())
+  // 스와이프 제스처를 위한 터치 상태
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
+  // 터치 이벤트가 처리되었는지 추적 (클릭 이벤트와 중복 방지)
+  const touchHandledRef = useRef(false)
 
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
@@ -46,7 +66,17 @@ export default function Main() {
   }
 
   const loadRecommendations = useCallback(async (forceRefresh: boolean = false) => {
-      setIsLoading(true)
+      // 이미 추천 데이터가 있고, 온보딩 데이터가 없고, 강제 새로고침이 아닌 경우에는 로드하지 않음
+      if (!forceRefresh && recommendations.length > 0 && !onboardingData) {
+        setIsLoading(false)
+        setShowSimpleLoading(false)
+        setShowLoadingScreen(false)
+        return
+      }
+
+      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시 (useEffect에서 이미 설정됨)
+      const shouldShowLoading = onboardingData && !forceRefresh && recommendations.length === 0
+
       try {
         // 임시 user_id (실제로는 인증된 사용자 ID 사용)
         const userId = 'temp-user-id'
@@ -64,8 +94,28 @@ export default function Main() {
         if (profile) {
           // 프로필 저장
           setProfile(profile)
-          // 추천 콘텐츠 가져오기 (forceRefresh가 true이면 기존 내역 무시하고 새로 가져오기)
-          const contents = await getRecommendations(profile, forceRefresh)
+          
+          // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
+          let notInterestedIdsFromDb: string[] = []
+          if (user) {
+            try {
+              notInterestedIdsFromDb = await getNotInterestedContentIds(user.id)
+              // 초기 로드 시 관심없음 상태 반영
+              setNotInterestedIds(new Set(notInterestedIdsFromDb))
+            } catch (error) {
+              console.error('관심없음 목록 조회 실패:', error)
+            }
+          }
+          
+          // 추천 콘텐츠 가져오기 (최대 10개 반환되므로 한 번 호출로 충분)
+          let contents = await getRecommendations(profile, forceRefresh)
+          
+          // 관심없음 콘텐츠 필터링
+          contents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
+          
+          // 최대 3개만 사용
+          contents = contents.slice(0, 3)
+          
           setRecommendations(contents)
           // 추천 로드 시 인덱스 초기화
           setCurrentIndex(0)
@@ -73,20 +123,57 @@ export default function Main() {
       } catch (error) {
         console.error('추천 콘텐츠 로드 실패:', error)
       } finally {
-        setIsLoading(false)
+        // 로딩 완료 처리
+        if (shouldShowLoading) {
+          setIsLoading(false)
+          setShowLoadingScreen(false)
+        }
+        setShowSimpleLoading(false)
       }
-  }, [onboardingData])
+  }, [onboardingData, recommendations.length])
 
   const handleRerecommend = () => {
     void loadRecommendations(true)
   }
 
   useEffect(() => {
-    loadRecommendations()
-  }, [loadRecommendations])
+    const currentPath = location.pathname
+    // sessionStorage에서 이전 경로 가져오기
+    const prevPath = sessionStorage.getItem('prevPath') || prevPathRef.current
+    
+    // 추천 데이터가 없을 때만 로딩 화면 표시
+    if (recommendations.length === 0) {
+      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시
+      if (prevPath?.includes('/onboarding')) {
+        setShowLoadingScreen(true)
+        setIsLoading(true)
+        setShowSimpleLoading(false)
+      } else {
+        // 마이페이지에서 넘어온 경우 또는 다른 경로에서 넘어온 경우 간단한 로딩 화면 표시
+        setShowSimpleLoading(true)
+        setShowLoadingScreen(false)
+        setIsLoading(false)
+      }
+    }
+    
+    // 이전 경로 저장 (다음 렌더링을 위해)
+    prevPathRef.current = currentPath
+    sessionStorage.setItem('prevPath', currentPath)
+    
+    // 데이터 로드 시작
+    void loadRecommendations()
+  }, [loadRecommendations, recommendations.length, location.pathname])
 
-  if (isLoading) {
+  // 로딩 화면 우선순위: 상세 로딩 > 간단한 로딩
+  // 온보딩에서 넘어올 때 상세 로딩 화면 표시
+  if (isLoading && showLoadingScreen) {
     return <RecommendationLoading profile={profile} onboardingData={onboardingData} />
+  }
+
+  // 마이페이지에서 넘어올 때 간단한 로딩 화면 표시
+  // (상세 로딩이 아닐 때만)
+  if (showSimpleLoading) {
+    return <SimpleLoading />
   }
 
   // 프로필이 있으면 프로필 사용, 없으면 온보딩 데이터 사용
@@ -110,10 +197,159 @@ export default function Main() {
     }
   }
 
+  // 스와이프 제스처 핸들러 (터치만)
+  const minSwipeDistance = 50
+
+  // 터치 이벤트 (모바일)
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchHandledRef.current = false
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) {
+      setTouchStart(null)
+      setTouchEnd(null)
+      return
+    }
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe && currentIndex < recommendations.length - 1) {
+      touchHandledRef.current = true
+      handleNext()
+    } else if (isRightSwipe && currentIndex > 0) {
+      touchHandledRef.current = true
+      handlePrev()
+    }
+    
+    // 상태 초기화
+    setTouchStart(null)
+    setTouchEnd(null)
+    
+    // 짧은 시간 후 터치 처리 플래그 리셋 (클릭 이벤트와 중복 방지)
+    setTimeout(() => {
+      touchHandledRef.current = false
+    }, 300)
+  }
+
+  // 관심없음 핸들러
+  const handleNotInterested = async (contentId: string) => {
+    // 이미 관심없음으로 표시된 경우 취소
+    if (notInterestedIds.has(contentId)) {
+      // 관심없음 취소
+      if (user) {
+        try {
+          await removeNotInterested(user.id, contentId)
+        } catch (error) {
+          console.error('관심없음 취소 실패:', error)
+        }
+      }
+      setNotInterestedIds((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(contentId)
+        return newSet
+      })
+      
+      // 토스트 표시 (관심없음 취소)
+      setToastMessage('restored')
+      setShowNotInterestedToast(true)
+      
+      // 3초 후 토스트 숨김
+      setTimeout(() => {
+        setShowNotInterestedToast(false)
+      }, 3000)
+      return
+    }
+
+    // 관심없음으로 표시
+    // 로그인한 사용자인 경우 데이터베이스에 저장
+    if (user) {
+      try {
+        await addNotInterested(user.id, contentId)
+      } catch (error) {
+        console.error('관심없음 저장 실패:', error)
+        // 에러가 발생해도 UI는 업데이트 (낙관적 업데이트)
+      }
+    }
+
+    // 관심없음 목록에 추가 (콘텐츠는 제거하지 않음)
+    setNotInterestedIds((prev) => new Set(prev).add(contentId))
+
+    // 토스트 표시 (관심없음)
+    setToastMessage('notInterested')
+    setShowNotInterestedToast(true)
+    
+    // 3초 후 토스트 숨김
+    setTimeout(() => {
+      setShowNotInterestedToast(false)
+    }, 3000)
+  }
+
   return (
-    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden overflow-x-hidden">
+      {/* 관심없음 토스트 */}
+      <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
+      
       {/* 스크롤 가능한 콘텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto bg-white relative">
+      <div 
+        className="h-full overflow-y-auto overflow-x-hidden bg-white relative"
+        onClick={(e) => {
+          const target = e.target as HTMLElement
+          
+          // 버튼이나 다른 인터랙티브 요소 클릭은 무시
+          if (target.closest('button') || 
+              target.closest('a') ||
+              target.tagName === 'BUTTON' ||
+              target.tagName === 'A') {
+            return
+          }
+          
+          // 카드 자체를 클릭한 경우는 무시 (카드의 handleCardClick에서 처리)
+          if (target.closest('[data-card-container]')) {
+            return
+          }
+          
+          // Selection Info Card나 다른 요소 클릭은 무시
+          if (target.closest('.bg-gray-50')) {
+            return
+          }
+          
+          // 터치 이벤트가 이미 처리된 경우 무시
+          if (touchHandledRef.current) {
+            return
+          }
+          
+          // 화면의 좌우 절반을 나눠서 처리
+          const containerRect = e.currentTarget.getBoundingClientRect()
+          const clickX = e.clientX - containerRect.left
+          const containerWidth = containerRect.width
+          const isLeftClick = clickX < containerWidth / 2
+          
+          // 좌측 클릭: 이전 카드로 이동
+          if (isLeftClick && currentIndex > 0) {
+            e.stopPropagation()
+            e.preventDefault()
+            setCurrentIndex(currentIndex - 1)
+            return
+          }
+          
+          // 우측 클릭: 다음 카드로 이동
+          if (!isLeftClick && currentIndex < recommendations.length - 1) {
+            e.stopPropagation()
+            e.preventDefault()
+            setCurrentIndex(currentIndex + 1)
+            return
+          }
+        }}
+      >
 
       {/* Selection Info Card */}
       {(displayGenre || moodNames) && (
@@ -141,7 +377,7 @@ export default function Main() {
         </div>
       )}
 
-      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4">
+      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4 z-30">
         {/* 다시하기 버튼 */}
         <button
           onClick={handleRestart}
@@ -160,82 +396,160 @@ export default function Main() {
           <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
         </button>
 
-        {/* Recommend Toggle Button */}
-        <button
-          type="button"
-          aria-label="toggle-recommend"
-          className="size-8 flex items-center justify-center rounded-full bg-white/0"
-          onClick={() => setRecommendEnabled((v) => !v)}
-        >
-          <img
-            src={recommendEnabled ? RecommendActive : RecommendInactive}
-            alt="recommend-toggle"
-            className="w-[28px] h-[28px]"
-          />
-        </button>
+        {/* 관심없음 버튼 */}
+        {recommendations.length > 0 && recommendations[currentIndex] && (
+          <button
+            type="button"
+            aria-label="not-interested"
+            className="size-8 flex items-center justify-center rounded-full bg-white/0"
+            onClick={() => {
+              const currentContent = recommendations[currentIndex]
+              if (currentContent?.id) {
+                handleNotInterested(currentContent.id)
+              }
+            }}
+          >
+            <img
+              src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
+              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? '관심없음 취소' : '관심없음'}
+              className="w-[28px] h-[28px]"
+            />
+          </button>
+        )}
       </div>
 
-      {/* 카드 네비게이션 버튼 */}
-      {recommendations.length > 0 && (
-        <div className="absolute top-[320px] w-full flex justify-between px-2 z-20 pointer-events-none">
-          {/* 이전 버튼 */}
-          <button
-            onClick={handlePrev}
-            aria-label="previous content"
-            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
-              currentIndex === 0 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
-            }`}
-            disabled={currentIndex === 0}
-          >
-            &lt;
-          </button>
-          {/* 다음 버튼 */}
-          <button
-            onClick={handleNext}
-            aria-label="next content"
-            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
-              currentIndex >= recommendations.length - 1 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
-            }`}
-            disabled={currentIndex >= recommendations.length - 1}
-          >
-            &gt;
-          </button>
+
+      {/* 인디케이터 도트 */}
+      {recommendations.length > 1 && (
+        <div className="absolute top-[520px] left-1/2 -translate-x-1/2 z-20 flex gap-2 pointer-events-none">
+          {recommendations.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={`pointer-events-auto transition-all ${
+                index === currentIndex 
+                  ? 'w-2 h-2 bg-[#2e2c6a] rounded-full' 
+                  : 'w-2 h-2 bg-[#2e2c6a]/40 rounded-full hover:bg-[#2e2c6a]/60'
+              }`}
+              aria-label={`Go to recommendation ${index + 1}`}
+            />
+          ))}
         </div>
       )}
 
       {/* Recommendation Cards -> Slider Container */}
-      {recommendations.length === 0 ? (
+      {isLoading ? (
+        // 로딩 중일 때는 아무것도 표시하지 않음 (또는 로딩 인디케이터)
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
+          {/* 로딩 중... */}
+        </div>
+      ) : recommendations.length === 0 ? (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
           추천 콘텐츠가 없습니다.
         </div>
       ) : (
-        // 슬라이더의 보이는 영역 (Viewport)
-        <div className="absolute top-[128px] w-full overflow-hidden z-10">
-          {/* 슬라이더 트랙 (모든 카드를 담음) */}
-          <div
-            className="flex gap-2"
-            style={{
-              // transform과 transition으로 슬라이드 구현
-              // w-72 (18rem) + gap-2 (0.5rem) = 18.5rem (296px)
-              // 50% (중앙) - 9rem (카드 절반) = 카드 1개 중앙 정렬
-              transform: `translateX(calc(50% - 9rem - ${currentIndex * 18.5}rem))`,
-              transition: 'transform 0.4s ease-in-out',
-            }}
-          >
-            {/* 모든 추천 카드를 렌더링 */}
-            {recommendations.map((content) => (
-              <RecommendationCard 
-                key={content.id} 
-                content={content}
-              />
-            ))}
+        // 카루셀 컨테이너 (반원 배치)
+        <div 
+          className="absolute top-[128px] w-full h-[500px] overflow-hidden z-10"
+        >
+          {/* 카드들을 반원으로 배치 */}
+          <div className="relative w-full h-full">
+            {recommendations.map((content, index) => {
+              const distance = index - currentIndex
+              // 반원의 각도 계산 (최대 ±45도)
+              const angle = distance * 25 // 각 카드당 25도씩 회전
+              // 반원의 반지름 (픽셀)
+              const radius = 180
+              // 원형 배치를 위한 x, y 오프셋
+              const xOffset = Math.sin((angle * Math.PI) / 180) * radius
+              const yOffset = (1 - Math.cos((angle * Math.PI) / 180)) * radius * 0.3
+              
+              const handleCardClick = (e: React.MouseEvent) => {
+                // 터치 이벤트가 이미 처리된 경우 클릭 이벤트 무시 (중복 방지)
+                if (touchHandledRef.current) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return
+                }
+                
+                // 카드 내부 버튼 클릭은 무시 (좋아요 버튼 등)
+                if ((e.target as HTMLElement).closest('button')) {
+                  return
+                }
+                
+                // 현재 활성화된 카드가 아닌 경우 무시
+                if (index !== currentIndex) {
+                  return
+                }
+                
+                // 카드의 실제 위치 계산
+                const cardElement = e.currentTarget as HTMLElement
+                const rect = cardElement.getBoundingClientRect()
+                const clickX = e.clientX - rect.left
+                const cardWidth = rect.width
+                const cardCenter = cardWidth / 2
+                const clickOffset = Math.abs(clickX - cardCenter)
+                const centerThreshold = cardWidth * 0.3 // 중앙 30% 영역
+                
+                // 중앙 부분을 클릭한 경우 상세 페이지로 이동
+                if (clickOffset < centerThreshold) {
+                  if (content.id) {
+                    navigate(`/content/${content.id}`)
+                  }
+                  e.stopPropagation()
+                  return
+                }
+                
+                // 좌우 클릭으로 카드 이동 (현재 인덱스 기준)
+                const isLeftClick = clickX < cardCenter
+                
+                if (isLeftClick && currentIndex > 0) {
+                  // 좌측 클릭: 이전 카드로 이동
+                  e.stopPropagation()
+                  setCurrentIndex(currentIndex - 1)
+                } else if (!isLeftClick && currentIndex < recommendations.length - 1) {
+                  // 우측 클릭: 다음 카드로 이동
+                  e.stopPropagation()
+                  setCurrentIndex(currentIndex + 1)
+                } else {
+                  // 경계에 있는 경우 이벤트 전파 차단
+                  e.stopPropagation()
+                }
+              }
+
+              return (
+                <div
+                  key={content.id}
+                  data-card-container
+                  className="absolute left-1/2 top-0 origin-center transition-all duration-500 ease-out"
+                  style={{
+                    transform: `translateX(calc(-50% + ${xOffset}px)) translateY(${yOffset}px) rotate(${angle}deg)`,
+                    zIndex: recommendations.length - Math.abs(distance),
+                  }}
+                  onTouchStart={onTouchStart}
+                  onTouchMove={onTouchMove}
+                  onTouchEnd={onTouchEnd}
+                  onClick={(e) => {
+                    // 카드 클릭은 이벤트 전파를 막아서 컨테이너의 클릭 이벤트가 발생하지 않도록
+                    e.stopPropagation()
+                  }}
+                >
+                  <RecommendationCard 
+                    content={content}
+                    isActive={index === currentIndex}
+                    distance={distance}
+                    onCardClick={handleCardClick}
+                  />
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
       </div>
 
-      {/* Sticky 하단 네비게이션 */}
-      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+      {/* Absolute 하단 네비게이션 (오버레이) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">
           <BottomNavigation />
         </div>

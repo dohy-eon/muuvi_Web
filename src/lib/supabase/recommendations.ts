@@ -85,9 +85,10 @@ export async function getRecommendations(
       const query_vector = embedData.vector
       
       // DB의 'match_contents' 함수(RPC)를 호출
+      // 관심없음 콘텐츠를 제외하기 위해 충분한 개수 요청
       const { data, error } = await supabase.rpc('match_contents', {
         query_vector: query_vector,
-        match_count: 5,
+        match_count: 10, // 더 많은 개수 요청 (관심없음 제외 후에도 3개 이상 확보)
         p_genre: profile.genre,
         p_mood_tags: p_mood_tags
       })
@@ -104,7 +105,8 @@ export async function getRecommendations(
 
       if (contentsWithOTT.length > 0) {
         console.log(`[AI 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
-        return contentsWithOTT.slice(0, 3)
+        // 최대 10개 반환 (관심없음 제외 후에도 충분한 개수 확보)
+        return contentsWithOTT.slice(0, 10)
       }
       
       console.log('[AI 추천 결과 없음] 태그 검색으로 폴백')
@@ -131,7 +133,7 @@ export async function getRecommendations(
       
       const { data: tagData, error: tagError } = await query
         .order('imdb_rating', { ascending: false, nullsFirst: false })
-        .limit(20)
+        .limit(30) // 더 많은 개수 요청
       
       if (tagError) {
         console.error('[태그 검색 실패]:', tagError)
@@ -165,7 +167,8 @@ export async function getRecommendations(
         }
       }
 
-      return contentsWithOTT.slice(0, 3)
+      // 최대 10개 반환 (관심없음 제외 후에도 충분한 개수 확보)
+      return contentsWithOTT.slice(0, 10)
     }
     
   } catch (error) {

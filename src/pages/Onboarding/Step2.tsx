@@ -145,7 +145,8 @@ export default function OnboardingStep2() {
       const userId = 'temp-user-id' // 실제로는 인증된 사용자 ID 사용
       await saveProfile(userId, updatedData)
 
-      // 메인 페이지로 이동
+      // 메인 페이지로 이동하기 전에 이전 경로 저장
+      sessionStorage.setItem('prevPath', '/onboarding/step2')
       navigate('/main')
     } catch (error) {
       console.error('온보딩 완료 처리 중 오류:', error)
