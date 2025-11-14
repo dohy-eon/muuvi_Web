@@ -70,9 +70,9 @@ function LoginPrompt() {
   }
 
   return (
-    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
       {/* 스크롤 가능한 콘텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className="h-full overflow-y-auto bg-white">
         <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center">
           <div className="flex-1 flex flex-col items-center justify-center">
             <img
@@ -101,8 +101,8 @@ function LoginPrompt() {
         </div>
       </div>
 
-      {/* Sticky 하단 네비게이션 */}
-      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+      {/* Absolute 하단 네비게이션 (오버레이) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">
           <BottomNavigation />
         </div>
@@ -338,9 +338,9 @@ export default function MyPage() {
   const nickname = user.user_metadata?.full_name || user.email?.split('@')[0] || '랜덤닉네임'
 
   return (
-    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
       {/* 스크롤 가능한 콘텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className="h-full overflow-y-auto bg-white">
         <div className="px-5 pt-16 pb-24">
           {/* 프로필 섹션 */}
           <div className="relative mb-6">
@@ -368,33 +368,33 @@ export default function MyPage() {
           </div>
 
           {/* 통계 섹션 */}
-          <div className="w-full max-w-[320px] h-[56px] relative bg-[#f0f2f4] rounded-[10px] overflow-hidden mb-6">
-            {/* 구분선 */}
-            <div className="w-0 h-9 left-[103px] top-[12px] absolute outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
-            <div className="w-0 h-9 left-[204px] top-[12px] absolute outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
-
+          <div className="w-full max-w-[320px] h-[56px] bg-[#f0f2f4] rounded-[10px] overflow-hidden mb-6 flex">
             {/* 찜했어요 섹션 */}
-            <div className="absolute left-0 w-[103px] h-full flex flex-col items-center justify-center">
+            <div className="flex-1 h-full flex flex-col items-center justify-center relative">
               <div className="text-black text-base font-bold font-pretendard tracking-tight mb-0.5">
                 {favoriteCount}
               </div>
               <div className="text-black text-xs font-normal font-pretendard tracking-tight">
                 찜했어요
               </div>
+              {/* 우측 구분선 */}
+              <div className="absolute right-0 top-[12px] w-0 h-9 outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
             </div>
 
             {/* 관심없어요 섹션 */}
-            <div className="absolute left-[103px] w-[101px] h-full flex flex-col items-center justify-center">
+            <div className="flex-1 h-full flex flex-col items-center justify-center relative">
               <div className="text-black text-base font-bold font-pretendard tracking-tight mb-0.5">
                 {notInterestedCount}
               </div>
               <div className="text-black text-xs font-normal font-pretendard tracking-tight">
                 관심없어요
               </div>
+              {/* 우측 구분선 */}
+              <div className="absolute right-0 top-[12px] w-0 h-9 outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
             </div>
 
             {/* 구독 중인 서비스 섹션 */}
-            <div className="absolute left-[204px] w-[116px] h-full flex flex-col items-center justify-center">
+            <div className="flex-1 h-full flex flex-col items-center justify-center">
               <div className="text-black text-base font-bold font-pretendard tracking-tight mb-0.5">
                 {subscribedServiceCount}
               </div>
@@ -408,8 +408,8 @@ export default function MyPage() {
           <div className="mb-8">
             <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">찜한 콘텐츠</h3>
             {favoriteContents.length > 0 ? (
-              <div className="overflow-x-auto -mx-5 px-5">
-                <div className="flex gap-4" style={{ width: 'max-content' }}>
+              <div className="overflow-x-auto -mx-5 px-5 show-scrollbar">
+                <div className="flex gap-4 pb-2" style={{ width: 'max-content' }}>
                   {favoriteContents.map((content) => (
                     <div key={content.id} className="flex-shrink-0">
                       <FavoriteContentCard 
@@ -470,8 +470,8 @@ export default function MyPage() {
         </div>
       </div>
 
-      {/* Sticky 하단 네비게이션 */}
-      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+      {/* Absolute 하단 네비게이션 (오버레이) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">
           <BottomNavigation />
         </div>

@@ -98,4 +98,30 @@
   *::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
   }
+  
+  /* 스크롤바 표시 클래스 */
+  .show-scrollbar {
+    -ms-overflow-style: auto; /* IE and Edge */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: #2e2c6a #f0f2f4; /* Firefox: thumb track */
+  }
+  
+  .show-scrollbar::-webkit-scrollbar {
+    display: block; /* Chrome, Safari, Opera */
+    height: 8px;
+  }
+  
+  .show-scrollbar::-webkit-scrollbar-track {
+    background: #f0f2f4;
+    border-radius: 4px;
+  }
+  
+  .show-scrollbar::-webkit-scrollbar-thumb {
+    background: #2e2c6a;
+    border-radius: 4px;
+  }
+  
+  .show-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #44438a;
+  }
 }
