@@ -294,13 +294,13 @@ export default function Main() {
   }
 
   return (
-    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
+    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden overflow-x-hidden">
       {/* 관심없음 토스트 */}
       <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
       
       {/* 스크롤 가능한 콘텐츠 영역 */}
       <div 
-        className="h-full overflow-y-auto bg-white relative"
+        className="h-full overflow-y-auto overflow-x-hidden bg-white relative"
         onClick={(e) => {
           const target = e.target as HTMLElement
           
@@ -450,7 +450,7 @@ export default function Main() {
       ) : (
         // 카루셀 컨테이너 (반원 배치)
         <div 
-          className="absolute top-[128px] w-full h-[500px] overflow-visible z-10"
+          className="absolute top-[128px] w-full h-[500px] overflow-hidden z-10"
         >
           {/* 카드들을 반원으로 배치 */}
           <div className="relative w-full h-full">
