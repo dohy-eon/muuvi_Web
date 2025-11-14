@@ -294,13 +294,13 @@ export default function Main() {
   }
 
   return (
-    <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
+    <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
       {/* 관심없음 토스트 */}
       <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
       
       {/* 스크롤 가능한 콘텐츠 영역 */}
       <div 
-        className="flex-1 overflow-y-auto bg-white relative"
+        className="h-full overflow-y-auto bg-white relative"
         onClick={(e) => {
           const target = e.target as HTMLElement
           
@@ -548,8 +548,8 @@ export default function Main() {
       )}
       </div>
 
-      {/* Sticky 하단 네비게이션 */}
-      <div className="sticky bottom-0 z-30 pt-4 pb-2 pointer-events-none">
+      {/* Absolute 하단 네비게이션 (오버레이) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">
           <BottomNavigation />
         </div>
