@@ -50,6 +50,11 @@ export default function Main() {
   const [toastMessage, setToastMessage] = useState<'notInterested' | 'restored'>('notInterested')
   // 관심없음으로 표시된 콘텐츠 ID 목록
   const [notInterestedIds, setNotInterestedIds] = useState<Set<string>>(new Set())
+  // 스와이프 제스처를 위한 터치 상태
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
+  // 터치 이벤트가 처리되었는지 추적 (클릭 이벤트와 중복 방지)
+  const touchHandledRef = useRef(false)
 
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
@@ -192,6 +197,49 @@ export default function Main() {
     }
   }
 
+  // 스와이프 제스처 핸들러 (터치만)
+  const minSwipeDistance = 50
+
+  // 터치 이벤트 (모바일)
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchHandledRef.current = false
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) {
+      setTouchStart(null)
+      setTouchEnd(null)
+      return
+    }
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe && currentIndex < recommendations.length - 1) {
+      touchHandledRef.current = true
+      handleNext()
+    } else if (isRightSwipe && currentIndex > 0) {
+      touchHandledRef.current = true
+      handlePrev()
+    }
+    
+    // 상태 초기화
+    setTouchStart(null)
+    setTouchEnd(null)
+    
+    // 짧은 시간 후 터치 처리 플래그 리셋 (클릭 이벤트와 중복 방지)
+    setTimeout(() => {
+      touchHandledRef.current = false
+    }, 300)
+  }
+
   // 관심없음 핸들러
   const handleNotInterested = async (contentId: string) => {
     // 이미 관심없음으로 표시된 경우 취소
@@ -251,7 +299,57 @@ export default function Main() {
       <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
       
       {/* 스크롤 가능한 콘텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto bg-white relative">
+      <div 
+        className="flex-1 overflow-y-auto bg-white relative"
+        onClick={(e) => {
+          const target = e.target as HTMLElement
+          
+          // 버튼이나 다른 인터랙티브 요소 클릭은 무시
+          if (target.closest('button') || 
+              target.closest('a') ||
+              target.tagName === 'BUTTON' ||
+              target.tagName === 'A') {
+            return
+          }
+          
+          // 카드 자체를 클릭한 경우는 무시 (카드의 handleCardClick에서 처리)
+          if (target.closest('[data-card-container]')) {
+            return
+          }
+          
+          // Selection Info Card나 다른 요소 클릭은 무시
+          if (target.closest('.bg-gray-50')) {
+            return
+          }
+          
+          // 터치 이벤트가 이미 처리된 경우 무시
+          if (touchHandledRef.current) {
+            return
+          }
+          
+          // 화면의 좌우 절반을 나눠서 처리
+          const containerRect = e.currentTarget.getBoundingClientRect()
+          const clickX = e.clientX - containerRect.left
+          const containerWidth = containerRect.width
+          const isLeftClick = clickX < containerWidth / 2
+          
+          // 좌측 클릭: 이전 카드로 이동
+          if (isLeftClick && currentIndex > 0) {
+            e.stopPropagation()
+            e.preventDefault()
+            setCurrentIndex(currentIndex - 1)
+            return
+          }
+          
+          // 우측 클릭: 다음 카드로 이동
+          if (!isLeftClick && currentIndex < recommendations.length - 1) {
+            e.stopPropagation()
+            e.preventDefault()
+            setCurrentIndex(currentIndex + 1)
+            return
+          }
+        }}
+      >
 
       {/* Selection Info Card */}
       {(displayGenre || moodNames) && (
@@ -279,7 +377,7 @@ export default function Main() {
         </div>
       )}
 
-      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4">
+      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4 z-30">
         {/* 다시하기 버튼 */}
         <button
           onClick={handleRestart}
@@ -320,31 +418,22 @@ export default function Main() {
         )}
       </div>
 
-      {/* 카드 네비게이션 버튼 */}
-      {recommendations.length > 0 && (
-        <div className="absolute top-[320px] w-full flex justify-between px-2 z-20 pointer-events-none">
-          {/* 이전 버튼 */}
-          <button
-            onClick={handlePrev}
-            aria-label="previous content"
-            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
-              currentIndex === 0 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
-            }`}
-            disabled={currentIndex === 0}
-          >
-            &lt;
-          </button>
-          {/* 다음 버튼 */}
-          <button
-            onClick={handleNext}
-            aria-label="next content"
-            className={`w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center text-xl font-bold transition-opacity pointer-events-auto ${
-              currentIndex >= recommendations.length - 1 ? 'opacity-0 cursor-default' : 'opacity-100 hover:bg-black/50'
-            }`}
-            disabled={currentIndex >= recommendations.length - 1}
-          >
-            &gt;
-          </button>
+
+      {/* 인디케이터 도트 */}
+      {recommendations.length > 1 && (
+        <div className="absolute top-[520px] left-1/2 -translate-x-1/2 z-20 flex gap-2 pointer-events-none">
+          {recommendations.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={`pointer-events-auto transition-all ${
+                index === currentIndex 
+                  ? 'w-2 h-2 bg-[#2e2c6a] rounded-full' 
+                  : 'w-2 h-2 bg-[#2e2c6a]/40 rounded-full hover:bg-[#2e2c6a]/60'
+              }`}
+              aria-label={`Go to recommendation ${index + 1}`}
+            />
+          ))}
         </div>
       )}
 
@@ -359,26 +448,101 @@ export default function Main() {
           추천 콘텐츠가 없습니다.
         </div>
       ) : (
-        // 슬라이더의 보이는 영역 (Viewport)
-        <div className="absolute top-[128px] w-full overflow-hidden z-10">
-          {/* 슬라이더 트랙 (모든 카드를 담음) */}
-          <div
-            className="flex gap-2"
-            style={{
-              // transform과 transition으로 슬라이드 구현
-              // w-72 (18rem) + gap-2 (0.5rem) = 18.5rem (296px)
-              // 50% (중앙) - 9rem (카드 절반) = 카드 1개 중앙 정렬
-              transform: `translateX(calc(50% - 9rem - ${currentIndex * 18.5}rem))`,
-              transition: 'transform 0.4s ease-in-out',
-            }}
-          >
-            {/* 모든 추천 카드를 렌더링 */}
-            {recommendations.map((content) => (
-              <RecommendationCard 
-                key={content.id} 
-                content={content}
-              />
-            ))}
+        // 카루셀 컨테이너 (반원 배치)
+        <div 
+          className="absolute top-[128px] w-full h-[500px] overflow-visible z-10"
+        >
+          {/* 카드들을 반원으로 배치 */}
+          <div className="relative w-full h-full">
+            {recommendations.map((content, index) => {
+              const distance = index - currentIndex
+              // 반원의 각도 계산 (최대 ±45도)
+              const angle = distance * 25 // 각 카드당 25도씩 회전
+              // 반원의 반지름 (픽셀)
+              const radius = 180
+              // 원형 배치를 위한 x, y 오프셋
+              const xOffset = Math.sin((angle * Math.PI) / 180) * radius
+              const yOffset = (1 - Math.cos((angle * Math.PI) / 180)) * radius * 0.3
+              
+              const handleCardClick = (e: React.MouseEvent) => {
+                // 터치 이벤트가 이미 처리된 경우 클릭 이벤트 무시 (중복 방지)
+                if (touchHandledRef.current) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return
+                }
+                
+                // 카드 내부 버튼 클릭은 무시 (좋아요 버튼 등)
+                if ((e.target as HTMLElement).closest('button')) {
+                  return
+                }
+                
+                // 현재 활성화된 카드가 아닌 경우 무시
+                if (index !== currentIndex) {
+                  return
+                }
+                
+                // 카드의 실제 위치 계산
+                const cardElement = e.currentTarget as HTMLElement
+                const rect = cardElement.getBoundingClientRect()
+                const clickX = e.clientX - rect.left
+                const cardWidth = rect.width
+                const cardCenter = cardWidth / 2
+                const clickOffset = Math.abs(clickX - cardCenter)
+                const centerThreshold = cardWidth * 0.3 // 중앙 30% 영역
+                
+                // 중앙 부분을 클릭한 경우 상세 페이지로 이동
+                if (clickOffset < centerThreshold) {
+                  if (content.id) {
+                    navigate(`/content/${content.id}`)
+                  }
+                  e.stopPropagation()
+                  return
+                }
+                
+                // 좌우 클릭으로 카드 이동 (현재 인덱스 기준)
+                const isLeftClick = clickX < cardCenter
+                
+                if (isLeftClick && currentIndex > 0) {
+                  // 좌측 클릭: 이전 카드로 이동
+                  e.stopPropagation()
+                  setCurrentIndex(currentIndex - 1)
+                } else if (!isLeftClick && currentIndex < recommendations.length - 1) {
+                  // 우측 클릭: 다음 카드로 이동
+                  e.stopPropagation()
+                  setCurrentIndex(currentIndex + 1)
+                } else {
+                  // 경계에 있는 경우 이벤트 전파 차단
+                  e.stopPropagation()
+                }
+              }
+
+              return (
+                <div
+                  key={content.id}
+                  data-card-container
+                  className="absolute left-1/2 top-0 origin-center transition-all duration-500 ease-out"
+                  style={{
+                    transform: `translateX(calc(-50% + ${xOffset}px)) translateY(${yOffset}px) rotate(${angle}deg)`,
+                    zIndex: recommendations.length - Math.abs(distance),
+                  }}
+                  onTouchStart={onTouchStart}
+                  onTouchMove={onTouchMove}
+                  onTouchEnd={onTouchEnd}
+                  onClick={(e) => {
+                    // 카드 클릭은 이벤트 전파를 막아서 컨테이너의 클릭 이벤트가 발생하지 않도록
+                    e.stopPropagation()
+                  }}
+                >
+                  <RecommendationCard 
+                    content={content}
+                    isActive={index === currentIndex}
+                    distance={distance}
+                    onCardClick={handleCardClick}
+                  />
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

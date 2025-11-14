@@ -9,6 +9,9 @@ import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
 
 interface RecommendationCardProps {
   content: Content
+  isActive?: boolean // 현재 활성화된 카드인지 여부
+  distance?: number // 현재 카드로부터의 거리 (0 = 현재 카드)
+  onCardClick?: (e: React.MouseEvent) => void // 부모에서 클릭 처리
 }
 
 // 장르/태그 색상 매핑 (한글 태그 기반)
@@ -40,7 +43,7 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
-export default function RecommendationCard({ content }: RecommendationCardProps) {
+export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick }: RecommendationCardProps) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
   const [isLiked, setIsLiked] = useState(false)
@@ -74,8 +77,15 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
     checkFavoriteStatus()
   }, [user, content.id])
 
-  const handleClick = () => {
-    if (content.id) {
+  const handleClick = (e: React.MouseEvent) => {
+    // 부모에서 클릭을 처리하는 경우
+    if (onCardClick) {
+      onCardClick(e)
+      return
+    }
+    
+    // 기본 동작: 상세 페이지로 이동 (중앙 카드만)
+    if (content.id && isActive) {
       navigate(`/content/${content.id}`)
     }
   }
@@ -113,9 +123,19 @@ export default function RecommendationCard({ content }: RecommendationCardProps)
   }
 
 
+  // 거리에 따른 블러 및 투명도 계산
+  const blurAmount = Math.abs(distance) === 0 ? 0 : Math.abs(distance) === 1 ? 8 : 12
+  const opacity = Math.abs(distance) === 0 ? 1 : Math.abs(distance) === 1 ? 0.7 : 0.4
+  const scale = Math.abs(distance) === 0 ? 1 : Math.abs(distance) === 1 ? 0.95 : 0.9
+
   return (
     <div
-      className="w-72 h-96 relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0"
+      className="w-72 h-96 relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
+      style={{
+        opacity,
+        transform: `scale(${scale})`,
+        filter: `blur(${blurAmount}px)`,
+      }}
       onClick={handleClick}
     >
       {/* 배경 이미지 전체 + 그라데이션 오버레이 */}
