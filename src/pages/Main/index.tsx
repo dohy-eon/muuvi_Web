@@ -4,6 +4,8 @@ import { useRecoilValue, useSetRecoilState } from 'recoil'
 import { onboardingDataState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
+import { addNotInterested, getNotInterestedContentIds, removeNotInterested } from '../../lib/supabase/notInterested'
+import { userState } from '../../recoil/userState'
 import RecommendationLoading from '../../components/RecommendationLoading'
 import SimpleLoading from '../../components/SimpleLoading'
 import RecommendationCard from '../../components/RecommendationCard'
@@ -11,8 +13,8 @@ import NotInterestedToast from '../../components/NotInterestedToast'
 import BottomNavigation from '../../components/BottomNavigation'
 import type { Content, Profile } from '../../types'
 import Reload from '../../assets/reload.svg'
-import RecommendActive from '../../assets/RecommendActive.svg'
 import RecommendInactive from '../../assets/RecommendInactive.svg'
+import RecommendActive from '../../assets/RecommendActive.svg'
 
 // 무드 ID를 한글 이름으로 매핑
 const moodIdToKorean: Record<string, string> = {
@@ -31,19 +33,23 @@ export default function Main() {
   const navigate = useNavigate()
   const location = useLocation()
   const setOnboardingData = useSetRecoilState(onboardingDataState)
+  const user = useRecoilValue(userState)
   const [recommendations, setRecommendations] = useState<Content[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showLoadingScreen, setShowLoadingScreen] = useState(false) // 온보딩에서 넘어올 때만 true
   const [showSimpleLoading, setShowSimpleLoading] = useState(false) // 마이페이지에서 넘어올 때 사용
   const [profile, setProfile] = useState<Profile | null>(null)
   const onboardingData = useRecoilValue(onboardingDataState)
-  const [recommendEnabled, setRecommendEnabled] = useState(true)
   // 현재 표시 중인 카드의 인덱스 상태
   const [currentIndex, setCurrentIndex] = useState(0)
   // 이전 경로를 추적하기 위한 ref
   const prevPathRef = useRef<string | null>(null)
   // 관심없음 토스트 표시 상태
   const [showNotInterestedToast, setShowNotInterestedToast] = useState(false)
+  // 토스트 메시지 타입 ('notInterested': 관심없음, 'restored': 관심없음 취소)
+  const [toastMessage, setToastMessage] = useState<'notInterested' | 'restored'>('notInterested')
+  // 관심없음으로 표시된 콘텐츠 ID 목록
+  const [notInterestedIds, setNotInterestedIds] = useState<Set<string>>(new Set())
 
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
@@ -83,8 +89,28 @@ export default function Main() {
         if (profile) {
           // 프로필 저장
           setProfile(profile)
-          // 추천 콘텐츠 가져오기 (forceRefresh가 true이면 기존 내역 무시하고 새로 가져오기)
-          const contents = await getRecommendations(profile, forceRefresh)
+          
+          // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
+          let notInterestedIdsFromDb: string[] = []
+          if (user) {
+            try {
+              notInterestedIdsFromDb = await getNotInterestedContentIds(user.id)
+              // 초기 로드 시 관심없음 상태 반영
+              setNotInterestedIds(new Set(notInterestedIdsFromDb))
+            } catch (error) {
+              console.error('관심없음 목록 조회 실패:', error)
+            }
+          }
+          
+          // 추천 콘텐츠 가져오기 (최대 10개 반환되므로 한 번 호출로 충분)
+          let contents = await getRecommendations(profile, forceRefresh)
+          
+          // 관심없음 콘텐츠 필터링
+          contents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
+          
+          // 최대 3개만 사용
+          contents = contents.slice(0, 3)
+          
           setRecommendations(contents)
           // 추천 로드 시 인덱스 초기화
           setCurrentIndex(0)
@@ -167,23 +193,50 @@ export default function Main() {
   }
 
   // 관심없음 핸들러
-  const handleNotInterested = (contentId: string) => {
-    // 추천 목록에서 해당 콘텐츠 제거
-    setRecommendations((prev) => prev.filter((content) => content.id !== contentId))
-    
-    // 현재 인덱스 조정 (제거된 항목이 현재 인덱스보다 앞에 있으면 인덱스 감소)
-    setCurrentIndex((prev) => {
-      const removedIndex = recommendations.findIndex((c) => c.id === contentId)
-      if (removedIndex < prev) {
-        return prev - 1
+  const handleNotInterested = async (contentId: string) => {
+    // 이미 관심없음으로 표시된 경우 취소
+    if (notInterestedIds.has(contentId)) {
+      // 관심없음 취소
+      if (user) {
+        try {
+          await removeNotInterested(user.id, contentId)
+        } catch (error) {
+          console.error('관심없음 취소 실패:', error)
+        }
       }
-      if (removedIndex === prev && prev >= recommendations.length - 1) {
-        return Math.max(0, prev - 1)
-      }
-      return prev
-    })
+      setNotInterestedIds((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(contentId)
+        return newSet
+      })
+      
+      // 토스트 표시 (관심없음 취소)
+      setToastMessage('restored')
+      setShowNotInterestedToast(true)
+      
+      // 3초 후 토스트 숨김
+      setTimeout(() => {
+        setShowNotInterestedToast(false)
+      }, 3000)
+      return
+    }
 
-    // 토스트 표시
+    // 관심없음으로 표시
+    // 로그인한 사용자인 경우 데이터베이스에 저장
+    if (user) {
+      try {
+        await addNotInterested(user.id, contentId)
+      } catch (error) {
+        console.error('관심없음 저장 실패:', error)
+        // 에러가 발생해도 UI는 업데이트 (낙관적 업데이트)
+      }
+    }
+
+    // 관심없음 목록에 추가 (콘텐츠는 제거하지 않음)
+    setNotInterestedIds((prev) => new Set(prev).add(contentId))
+
+    // 토스트 표시 (관심없음)
+    setToastMessage('notInterested')
     setShowNotInterestedToast(true)
     
     // 3초 후 토스트 숨김
@@ -195,7 +248,7 @@ export default function Main() {
   return (
     <div className="w-full h-screen bg-white relative font-pretendard flex flex-col overflow-hidden">
       {/* 관심없음 토스트 */}
-      <NotInterestedToast isVisible={showNotInterestedToast} />
+      <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
       
       {/* 스크롤 가능한 콘텐츠 영역 */}
       <div className="flex-1 overflow-y-auto bg-white relative">
@@ -245,19 +298,26 @@ export default function Main() {
           <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
         </button>
 
-        {/* Recommend Toggle Button */}
-        <button
-          type="button"
-          aria-label="toggle-recommend"
-          className="size-8 flex items-center justify-center rounded-full bg-white/0"
-          onClick={() => setRecommendEnabled((v) => !v)}
-        >
-          <img
-            src={recommendEnabled ? RecommendActive : RecommendInactive}
-            alt="recommend-toggle"
-            className="w-[28px] h-[28px]"
-          />
-        </button>
+        {/* 관심없음 버튼 */}
+        {recommendations.length > 0 && recommendations[currentIndex] && (
+          <button
+            type="button"
+            aria-label="not-interested"
+            className="size-8 flex items-center justify-center rounded-full bg-white/0"
+            onClick={() => {
+              const currentContent = recommendations[currentIndex]
+              if (currentContent?.id) {
+                handleNotInterested(currentContent.id)
+              }
+            }}
+          >
+            <img
+              src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
+              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? '관심없음 취소' : '관심없음'}
+              className="w-[28px] h-[28px]"
+            />
+          </button>
+        )}
       </div>
 
       {/* 카드 네비게이션 버튼 */}
@@ -317,7 +377,6 @@ export default function Main() {
               <RecommendationCard 
                 key={content.id} 
                 content={content}
-                onNotInterested={handleNotInterested}
               />
             ))}
           </div>

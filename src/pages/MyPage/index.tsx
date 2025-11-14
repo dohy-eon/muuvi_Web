@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { userState } from '../../recoil/userState'
 import { addFavorite, removeFavorite, getFavorites, getFavoriteCount } from '../../lib/supabase/favorites'
+import { getNotInterestedContents, getNotInterestedCount, removeNotInterested } from '../../lib/supabase/notInterested'
 import BottomNavigation from '../../components/BottomNavigation'
 import MuuviLogoPrimary from '../../assets/MuuviLogoPrimary.svg'
 import GoogleLogo from '../../assets/googleLogo.svg'
 import LikeIcon from './like.svg'
 import LikeCheckedIcon from './likeChecked.svg'
+import RecommendInactive from '../../assets/RecommendInactive.svg'
 import type { Content } from '../../types'
 
 function LoginPrompt() {
@@ -126,12 +128,13 @@ const genreTagColors: Record<string, string> = {
 // 찜한 콘텐츠 카드 컴포넌트
 interface FavoriteContentCardProps {
   content: Content
+  isNotInterested?: boolean // 관심없음 콘텐츠인지 여부
 }
 
-function FavoriteContentCard({ content, onRemove }: FavoriteContentCardProps & { onRemove?: () => void }) {
+function FavoriteContentCard({ content, onRemove, isNotInterested = false }: FavoriteContentCardProps & { onRemove?: () => void }) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
-  const [isLiked, setIsLiked] = useState(true) // 마이페이지에서는 이미 좋아요한 콘텐츠만 표시
+  const [isLiked, setIsLiked] = useState(!isNotInterested) // 관심없음이면 좋아요 상태가 아님
   const [isLoading, setIsLoading] = useState(false)
 
   const genreTags = content.tags && content.tags.length > 0 
@@ -224,8 +227,8 @@ function FavoriteContentCard({ content, onRemove }: FavoriteContentCardProps & {
         </div>
       )}
 
-      {/* 좋아요 아이콘 (우측 상단) */}
-      {user && (
+      {/* 좋아요 아이콘 (우측 상단) - 관심없음이 아닌 경우만 표시 */}
+      {user && !isNotInterested && (
         <button
           onClick={handleLikeClick}
           disabled={isLoading}
@@ -235,6 +238,25 @@ function FavoriteContentCard({ content, onRemove }: FavoriteContentCardProps & {
           <img 
             src={isLiked ? LikeCheckedIcon : LikeIcon} 
             alt={isLiked ? '좋아요 취소' : '좋아요'}
+            className="w-8 h-8"
+          />
+        </button>
+      )}
+
+      {/* 관심없음 취소 버튼 (우측 상단) - 관심없음인 경우만 표시 */}
+      {user && isNotInterested && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove?.()
+          }}
+          disabled={isLoading}
+          className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center z-10 disabled:opacity-50"
+          aria-label="관심없음 취소"
+        >
+          <img 
+            src={RecommendInactive} 
+            alt="관심없음 취소"
             className="w-8 h-8"
           />
         </button>
@@ -275,30 +297,37 @@ export default function MyPage() {
   const [notInterestedCount, setNotInterestedCount] = useState(0)
   const [subscribedServiceCount, setSubscribedServiceCount] = useState(0)
   const [favoriteContents, setFavoriteContents] = useState<Content[]>([])
+  const [notInterestedContents, setNotInterestedContents] = useState<Content[]>([])
 
   // 좋아요한 콘텐츠와 통계 가져오기
   useEffect(() => {
-    const loadFavorites = async () => {
+    const loadData = async () => {
       if (!user) {
         setFavoriteCount(0)
         setFavoriteContents([])
+        setNotInterestedCount(0)
+        setNotInterestedContents([])
         return
       }
 
       try {
-        const [favorites, count] = await Promise.all([
+        const [favorites, favoriteCount, notInterested, notInterestedCount] = await Promise.all([
           getFavorites(user.id),
-          getFavoriteCount(user.id)
+          getFavoriteCount(user.id),
+          getNotInterestedContents(user.id),
+          getNotInterestedCount(user.id)
         ])
         
         setFavoriteContents(favorites)
-        setFavoriteCount(count)
+        setFavoriteCount(favoriteCount)
+        setNotInterestedContents(notInterested)
+        setNotInterestedCount(notInterestedCount)
       } catch (error) {
-        console.error('좋아요 목록 로드 실패:', error)
+        console.error('데이터 로드 실패:', error)
       }
     }
 
-    loadFavorites()
+    loadData()
   }, [user])
 
   if (!user) {
@@ -376,25 +405,68 @@ export default function MyPage() {
           </div>
 
           {/* 찜한 콘텐츠 섹션 */}
-          {favoriteContents.length > 0 ? (
-            <div className="flex gap-4">
-              {favoriteContents.map((content) => (
-                <FavoriteContentCard 
-                  key={content.id} 
-                  content={content}
-                  onRemove={() => {
-                    // 좋아요 취소 시 목록에서 제거
-                    setFavoriteContents(prev => prev.filter(c => c.id !== content.id))
-                    setFavoriteCount(prev => Math.max(0, prev - 1))
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-[14px] text-gray-500">찜한 콘텐츠가 없습니다</p>
-            </div>
-          )}
+          <div className="mb-8">
+            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">찜한 콘텐츠</h3>
+            {favoriteContents.length > 0 ? (
+              <div className="overflow-x-auto -mx-5 px-5">
+                <div className="flex gap-4" style={{ width: 'max-content' }}>
+                  {favoriteContents.map((content) => (
+                    <div key={content.id} className="flex-shrink-0">
+                      <FavoriteContentCard 
+                        content={content}
+                        onRemove={() => {
+                          // 좋아요 취소 시 목록에서 제거
+                          setFavoriteContents(prev => prev.filter(c => c.id !== content.id))
+                          setFavoriteCount(prev => Math.max(0, prev - 1))
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-[14px] text-gray-500">찜한 콘텐츠가 없습니다</p>
+              </div>
+            )}
+          </div>
+
+          {/* 관심없음 콘텐츠 섹션 */}
+          <div>
+            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">관심없음 콘텐츠</h3>
+            {notInterestedContents.length > 0 ? (
+              <div className="overflow-x-auto -mx-5 px-5">
+                <div className="flex gap-4" style={{ width: 'max-content' }}>
+                  {notInterestedContents.map((content) => (
+                    <div key={content.id} className="flex-shrink-0">
+                      <FavoriteContentCard 
+                        content={content}
+                        isNotInterested={true}
+                        onRemove={async () => {
+                          // 관심없음 취소
+                          if (user && content.id) {
+                            try {
+                              const success = await removeNotInterested(user.id, content.id)
+                              if (success) {
+                                setNotInterestedContents(prev => prev.filter(c => c.id !== content.id))
+                                setNotInterestedCount(prev => Math.max(0, prev - 1))
+                              }
+                            } catch (error) {
+                              console.error('관심없음 취소 실패:', error)
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-[14px] text-gray-500">관심없음으로 표시한 콘텐츠가 없습니다</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

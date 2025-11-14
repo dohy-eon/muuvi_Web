@@ -1,9 +1,14 @@
 interface NotInterestedToastProps {
   isVisible: boolean
+  message?: 'notInterested' | 'restored' // 'notInterested': 관심없음, 'restored': 관심없음 취소
 }
 
-export default function NotInterestedToast({ isVisible }: NotInterestedToastProps) {
+export default function NotInterestedToast({ isVisible, message = 'notInterested' }: NotInterestedToastProps) {
   if (!isVisible) return null
+
+  const toastMessage = message === 'restored' 
+    ? '다시 이 작품을 추천할게요!'
+    : '이제 이 작품은 추천되지 않아요!'
 
   return (
     <div className="fixed top-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-[375px] px-5 pt-2 pointer-events-none">
@@ -14,7 +19,7 @@ export default function NotInterestedToast({ isVisible }: NotInterestedToastProp
         }}
       >
         <p className="text-white text-[16px] font-medium font-pretendard text-center tracking-[0.232px]">
-          이제 이 작품은 추천되지 않아요!
+          {toastMessage}
         </p>
       </div>
       <style>{`

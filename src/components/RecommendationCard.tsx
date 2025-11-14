@@ -6,11 +6,9 @@ import { userState } from '../recoil/userState'
 import { addFavorite, removeFavorite, isFavorite } from '../lib/supabase/favorites'
 import LikeIcon from '../pages/MyPage/like.svg'
 import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
-import RecommendInactive from '../assets/RecommendInactive.svg'
 
 interface RecommendationCardProps {
   content: Content
-  onNotInterested?: (contentId: string) => void
 }
 
 // 장르/태그 색상 매핑 (한글 태그 기반)
@@ -42,7 +40,7 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
-export default function RecommendationCard({ content, onNotInterested }: RecommendationCardProps) {
+export default function RecommendationCard({ content }: RecommendationCardProps) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
   const [isLiked, setIsLiked] = useState(false)
@@ -114,12 +112,6 @@ export default function RecommendationCard({ content, onNotInterested }: Recomme
     }
   }
 
-  const handleNotInterestedClick = (e: React.MouseEvent) => {
-    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
-    if (content.id && onNotInterested) {
-      onNotInterested(content.id)
-    }
-  }
 
   return (
     <div
@@ -147,19 +139,6 @@ export default function RecommendationCard({ content, onNotInterested }: Recomme
           />
         </button>
       )}
-
-      {/* 관심없음 버튼 (좌측 상단) */}
-      <button
-        onClick={handleNotInterestedClick}
-        className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center z-10"
-        aria-label="관심없음"
-      >
-        <img 
-          src={RecommendInactive} 
-          alt="관심없음"
-          className="w-8 h-8"
-        />
-      </button>
 
             {/* 제목/정보 - 좌하단 정렬 */}
             <div className="absolute left-8 bottom-20 text-left text-white">
