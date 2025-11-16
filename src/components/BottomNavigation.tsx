@@ -51,15 +51,15 @@ export default function BottomNavigation() {
         />
       </button>
 
-      {/* 콘텐츠 탭 (오른쪽) */}
+      {/* 콘텐츠/검색 탭 (오른쪽) */}
       <button
         className={`w-16 h-14 rounded-[40px] backdrop-blur-md bg-white/3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0px_0px_4px_0px_rgba(0,0,0,0.05)] border border-white/5 overflow-hidden cursor-pointer flex items-center justify-center transition-all hover:bg-white/10 ${
-          isPrefixActive('/content') ? 'bg-white/10' : ''
+          isPrefixActive('/search') ? 'bg-white/10' : ''
         }`}
-        onClick={() => navigate('/content')}
+        onClick={() => navigate('/search')}
       >
         <img
-          src={isPrefixActive('/content') ? contentSelected : contentsUnselected}
+          src={isPrefixActive('/search') ? contentSelected : contentsUnselected}
           alt="contents"
           className="w-[18px] h-[18px]"
         />
