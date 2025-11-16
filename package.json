@@ -17,8 +17,10 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.78.0",
+    "@reduxjs/toolkit": "^2.2.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-redux": "^9.2.0",
     "react-router-dom": "^7.9.5",
     "recoil": "^0.7.7"
   },

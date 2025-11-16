@@ -1,9 +1,10 @@
 import React from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
+import type { RootState } from '../store';
 import { increment, decrement, incrementByAmount } from '../store/features/counter/counterSlice';
 
 export const Counter: React.FC = () => {
-  const count = useAppSelector((state) => state.counter.value);
+  const count = useAppSelector((state: RootState) => state.counter.value);
   const dispatch = useAppDispatch();
 
   return (

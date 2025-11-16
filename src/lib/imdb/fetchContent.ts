@@ -66,7 +66,7 @@ interface TMDBWatchProvidersResponse {
  * TMDB Search API로 콘텐츠 검색 (제목 기반)
  * discover API로 결과가 부족할 때 사용
  */
-async function searchContentFromTMDB(
+export async function searchContentFromTMDB(
   query: string,
   contentType: 'movie' | 'tv' = 'movie',
   limit: number = 10
@@ -470,7 +470,7 @@ async function getContentDetailsFromTMDB(
 /**
  * TMDB 영화/TV ID로 IMDB ID 가져오기 (레거시 함수 - 하위 호환성)
  */
-async function getImdbIdFromTMDB(
+export async function getImdbIdFromTMDB(
   tmdbId: number,
   contentType: 'movie' | 'tv' = 'movie'
 ): Promise<string | null> {
@@ -541,7 +541,7 @@ async function getWatchProvidersFromTMDB(
  * 무드 태그를 TMDB 장르로 변환 (레거시 함수 - 하위 호환성)
  * @deprecated moodsToTMDBParams를 사용하세요
  */
-function tagsToGenreIds(tags: string[]): number[] {
+export function tagsToGenreIds(tags: string[]): number[] {
   // IMDB 태그를 TMDB 장르 ID로 변환하는 레거시 매핑
   const tagToGenre: Record<string, number[]> = {
     Romance: [10749],

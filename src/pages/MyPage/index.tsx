@@ -295,7 +295,7 @@ export default function MyPage() {
   const user = useRecoilValue(userState)
   const [favoriteCount, setFavoriteCount] = useState(0)
   const [notInterestedCount, setNotInterestedCount] = useState(0)
-  const [subscribedServiceCount, setSubscribedServiceCount] = useState(0)
+  const [subscribedServiceCount, _setSubscribedServiceCount] = useState(0)
   const [favoriteContents, setFavoriteContents] = useState<Content[]>([])
   const [notInterestedContents, setNotInterestedContents] = useState<Content[]>([])
 
