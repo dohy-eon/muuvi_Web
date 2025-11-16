@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Disallow admin or internal routes if any (uncomment and edit)
+# Disallow: /admin/
+
+Sitemap: https://muuvi.site/sitemap.xml
+
+
