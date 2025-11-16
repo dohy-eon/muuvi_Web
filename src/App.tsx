@@ -7,6 +7,7 @@ import Content from './pages/Content'
 import MyPage from './pages/MyPage'
 import Splash from './pages/Splash'
 import Search from './pages/Search'
+import ContentTMDB from './pages/ContentTMDB'
 import AuthProvider from './components/AuthProvider'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
                 <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
                 <Route path="/main" element={<Main />} />
                 <Route path="/content/:id" element={<Content />} />
+                <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
                 <Route path="/mypage" element={<MyPage />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/" element={<Splash />} />

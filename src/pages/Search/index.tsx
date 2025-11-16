@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BottomNavigation from '../../components/BottomNavigation'
+import { searchTMDB, type NormalizedSearchResult } from '../../lib/tmdb/search'
 
-type SearchResult = {
-  id: string
-  title: string
-  year?: string
-  posterUrl?: string
-  ott?: string[]
-}
+type SearchResult = NormalizedSearchResult
 
 const RECENT_KEY = 'muuvi_recent_searches_v1'
 
@@ -52,19 +47,18 @@ export default function Search() {
       const next = [value, ...prev.filter((v) => v !== value)]
       return next.slice(0, 10)
     })
-    // 실제 검색 API 연결 전까지 스켈레톤 후 더미 결과 표시
     setResults([])
-    setTimeout(() => {
-      const dummy: SearchResult[] = Array.from({ length: 6 }).map((_, i) => ({
-        id: `${value}-${i}`,
-        title: `${value} 결과 ${i + 1}`,
-        year: `${2018 + (i % 6)}`,
-        posterUrl: undefined,
-        ott: i % 2 === 0 ? ['Netflix'] : ['Disney+'],
-      }))
-      setResults(dummy)
-      setIsSearching(false)
-    }, 600)
+    ;(async () => {
+      try {
+        const data = await searchTMDB(value)
+        setResults(data)
+      } catch (e) {
+        console.error('TMDB 검색 실패:', e)
+        setResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    })()
   }
 
   const showEmptyState = !query && !focused
@@ -202,7 +196,7 @@ export default function Search() {
               {results.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => navigate(`/content/${item.id}`)}
+                  onClick={() => navigate(`/content/tmdb/${item.mediaType}/${item.id}`)}
                   className="w-full flex gap-3"
                 >
                   <div className="w-20 h-28 rounded-[8px] bg-[#e7e9ec] overflow-hidden">
@@ -222,16 +216,6 @@ export default function Search() {
                       {item.title}
                     </p>
                     <p className="text-[12px] text-[#6b7280] mt-1">{item.year ?? ''}</p>
-                    <div className="flex gap-1 mt-2">
-                      {(item.ott ?? []).map((o) => (
-                        <span
-                          key={o}
-                          className="px-2 h-6 rounded-full bg-[#2e2c6a]/10 text-[#2e2c6a] text-[11px] inline-flex items-center"
-                        >
-                          {o}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 </button>
               ))}
