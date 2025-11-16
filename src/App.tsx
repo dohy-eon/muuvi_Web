@@ -6,6 +6,7 @@ import Main from './pages/Main'
 import Content from './pages/Content'
 import MyPage from './pages/MyPage'
 import Splash from './pages/Splash'
+import Search from './pages/Search'
 import AuthProvider from './components/AuthProvider'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
                 <Route path="/main" element={<Main />} />
                 <Route path="/content/:id" element={<Content />} />
                 <Route path="/mypage" element={<MyPage />} />
+                <Route path="/search" element={<Search />} />
                 <Route path="/" element={<Splash />} />
               </Routes>
             </AuthProvider>
