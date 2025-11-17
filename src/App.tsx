@@ -5,6 +5,7 @@ import OnboardingStep2 from './pages/Onboarding/Step2'
 import Main from './pages/Main'
 import Content from './pages/Content'
 import MyPage from './pages/MyPage'
+import Settings from './pages/Settings'
 import Splash from './pages/Splash'
 import Search from './pages/Search'
 import ContentTMDB from './pages/ContentTMDB'
@@ -28,6 +29,7 @@ export default function App() {
                 <Route path="/content/:id" element={<Content />} />
                 <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
                 <Route path="/mypage" element={<MyPage />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/" element={<Splash />} />
               </Routes>
