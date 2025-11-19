@@ -377,65 +377,7 @@ export default function Main() {
         </div>
       )}
 
-      <div className="absolute left-1/2 -translate-x-1/2 top-[548px] flex items-center justify-center gap-4 z-30">
-        {/* 다시하기 버튼 */}
-        <button
-          onClick={handleRestart}
-          className="px-4 py-2 bg-[#2e2c6a] text-white text-sm font-semibold rounded-lg hover:bg-[#3a3878] transition-colors whitespace-nowrap"
-        >
-          다시하기
-        </button>
 
-        {/* Reload Button */}
-        <button
-          type="button"
-          aria-label="reload-recommendations"
-          className="size-8 flex items-center justify-center rounded-full bg-white/0"
-          onClick={handleRerecommend}
-        >
-          <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
-        </button>
-
-        {/* 관심없음 버튼 */}
-        {recommendations.length > 0 && recommendations[currentIndex] && (
-          <button
-            type="button"
-            aria-label="not-interested"
-            className="size-8 flex items-center justify-center rounded-full bg-white/0"
-            onClick={() => {
-              const currentContent = recommendations[currentIndex]
-              if (currentContent?.id) {
-                handleNotInterested(currentContent.id)
-              }
-            }}
-          >
-            <img
-              src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
-              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? '관심없음 취소' : '관심없음'}
-              className="w-[28px] h-[28px]"
-            />
-          </button>
-        )}
-      </div>
-
-
-      {/* 인디케이터 도트 */}
-      {recommendations.length > 1 && (
-        <div className="absolute top-[520px] left-1/2 -translate-x-1/2 z-20 flex gap-2 pointer-events-none">
-          {recommendations.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentIndex(index)}
-              className={`pointer-events-auto transition-all ${
-                index === currentIndex 
-                  ? 'w-2 h-2 bg-[#2e2c6a] rounded-full' 
-                  : 'w-2 h-2 bg-[#2e2c6a]/40 rounded-full hover:bg-[#2e2c6a]/60'
-              }`}
-              aria-label={`Go to recommendation ${index + 1}`}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Recommendation Cards -> Slider Container */}
       {isLoading ? (
@@ -450,7 +392,7 @@ export default function Main() {
       ) : (
         // 카루셀 컨테이너 (반원 배치)
         <div 
-          className="absolute top-[128px] w-full h-[500px] overflow-hidden z-10"
+          className="absolute top-[80px] w-full h-[600px] overflow-hidden z-10"
         >
           {/* 카드들을 반원으로 배치 */}
           <div className="relative w-full h-full">
@@ -546,6 +488,66 @@ export default function Main() {
           </div>
         </div>
       )}
+
+      {/* 인디케이터 도트 - 카드 아래, 버튼들 위에 배치 */}
+      {recommendations.length > 1 && (
+        <div className="absolute top-[508px] left-1/2 -translate-x-1/2 z-30 flex gap-2 pointer-events-none">
+          {recommendations.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={`pointer-events-auto transition-all ${
+                index === currentIndex 
+                  ? 'w-2 h-2 bg-[#2e2c6a] rounded-full' 
+                  : 'w-2 h-2 bg-[#2e2c6a]/40 rounded-full hover:bg-[#2e2c6a]/60'
+              }`}
+              aria-label={`Go to recommendation ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 다시하기, 리로드, 관심없음 버튼들 */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-[540px] flex items-center justify-center gap-4 z-30">
+        {/* 다시하기 버튼 */}
+        <button
+          onClick={handleRestart}
+          className="px-4 py-2 bg-[#2e2c6a] text-white text-sm font-semibold rounded-lg hover:bg-[#3a3878] transition-colors whitespace-nowrap"
+        >
+          다시하기
+        </button>
+
+        {/* Reload Button */}
+        <button
+          type="button"
+          aria-label="reload-recommendations"
+          className="size-8 flex items-center justify-center rounded-full bg-white/0"
+          onClick={handleRerecommend}
+        >
+          <img src={Reload} alt="reload" className="w-[28px] h-[28px]" />
+        </button>
+
+        {/* 관심없음 버튼 */}
+        {recommendations.length > 0 && recommendations[currentIndex] && (
+          <button
+            type="button"
+            aria-label="not-interested"
+            className="size-8 flex items-center justify-center rounded-full bg-white/0"
+            onClick={() => {
+              const currentContent = recommendations[currentIndex]
+              if (currentContent?.id) {
+                handleNotInterested(currentContent.id)
+              }
+            }}
+          >
+            <img
+              src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
+              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? '관심없음 취소' : '관심없음'}
+              className="w-[28px] h-[28px]"
+            />
+          </button>
+        )}
+      </div>
       </div>
 
       {/* Absolute 하단 네비게이션 (오버레이) */}

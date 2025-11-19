@@ -130,7 +130,7 @@ export default function RecommendationCard({ content, isActive = false, distance
 
   return (
     <div
-      className="w-72 h-96 relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
+      className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
       style={{
         opacity,
         transform: `scale(${scale})`,
@@ -144,82 +144,16 @@ export default function RecommendationCard({ content, isActive = false, distance
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/90" />
 
-      {/* 좋아요 아이콘 (우측 상단) */}
-      {user && (
-        <button
-          onClick={handleLikeClick}
-          disabled={isLoading}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center z-10 disabled:opacity-50"
-          aria-label={isLiked ? '좋아요 취소' : '좋아요'}
-        >
-          <img 
-            src={isLiked ? LikeCheckedIcon : LikeIcon} 
-            alt={isLiked ? '좋아요 취소' : '좋아요'}
-            className="w-8 h-8"
-          />
-        </button>
-      )}
-
-            {/* 제목/정보 - 좌하단 정렬 */}
-            <div className="absolute left-8 bottom-20 text-left text-white">
-              <div className="text-base font-semibold font-pretendard">{content.title}</div>
-              <div className="mt-1 text-xs font-normal font-pretendard opacity-90">
-                {content.genre || content.genres?.[0] || '영화'} •{content.year || ''}
-              </div>
-            </div>
-
-      {/* 작은 포스터 썸네일 - 우하단 */}
-      {content.poster_url && (
-        <img
-          src={content.poster_url}
-          alt={`${content.title} poster`}
-          className="absolute right-4 bottom-4 w-[84px] h-[120px] object-cover rounded-[6px]"
-        />
-      )}
-
-      {/* OTT 제공자 로고들 - 무드 태그 위 (블로그 참고: 최대 6개, 이미지 onerror 처리) */}
-      {content.ott_providers && content.ott_providers.length > 0 && (
-        <div className="absolute left-8 bottom-[44px] flex gap-1.5">
-          {content.ott_providers.slice(0, 6).map((provider, index) => (
-            <div
-              key={provider.provider_id || index}
-              className="w-6 h-6 rounded overflow-hidden bg-white/5 backdrop-blur-sm flex items-center justify-center"
-            >
-              {provider.logo_path ? (
-                <img
-                  src={provider.logo_path}
-                  alt={provider.provider_name}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    // 이미지 로드 실패 시 대체 처리
-                    const target = e.target as HTMLImageElement
-                    target.style.display = 'none'
-                    const parent = target.parentElement
-                    if (parent) {
-                      parent.innerHTML = `<span class="text-[8px] text-white font-medium truncate px-0.5">${provider.provider_name}</span>`
-                    }
-                  }}
-                />
-              ) : (
-                <span className="text-[8px] text-white font-medium truncate px-0.5">
-                  {provider.provider_name}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 태그들 - 좌하단 (실제 장르 태그만 표시) */}
+      {/* 태그들 - 상단 왼쪽 */}
       {genreTags.length > 0 && (
-        <div className="absolute left-8 bottom-4 flex gap-2">
+        <div className="absolute top-4 left-4 flex gap-2 z-20">
           {genreTags.map((tag, tagIndex) => {
             const tagColor = genreTagColors[tag] || genreTagColors['default']
 
             return (
               <div
                 key={tagIndex}
-                className={`px-2 h-5 ${tagColor} rounded-md overflow-hidden flex items-center justify-center`}
+                className={`px-2 h-5 ${tagColor} rounded-[6px] overflow-hidden flex items-center justify-center flex-shrink-0`}
               >
                 <div className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap">
                   {tag}
@@ -229,6 +163,96 @@ export default function RecommendationCard({ content, isActive = false, distance
           })}
         </div>
       )}
+
+      {/* 좋아요 아이콘 (우측 상단) */}
+      {user && (
+        <button
+          onClick={handleLikeClick}
+          disabled={isLoading}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center z-30 disabled:opacity-50"
+          aria-label={isLiked ? '좋아요 취소' : '좋아요'}
+          style={{ pointerEvents: 'auto' }}
+        >
+          <img 
+            src={isLiked ? LikeCheckedIcon : LikeIcon} 
+            alt={isLiked ? '좋아요 취소' : '좋아요'}
+            className="w-8 h-8"
+          />
+        </button>
+      )}
+
+      {/* 하단 영역 - 정보, 제목, 포스터, OTT 로고 */}
+      <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
+        <div className="relative flex items-end gap-3">
+          {/* 하단 왼쪽 영역 - 텍스트와 OTT 로고 */}
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0" style={{ maxWidth: 'calc(100% - 100px)' }}>
+            {/* 정보 텍스트 */}
+            <div className="text-white text-xs font-normal font-pretendard whitespace-nowrap">
+              {content.genre || content.genres?.[0] || '영화'} •{content.year || ''}
+            </div>
+
+            {/* 제목 - 반응형 폰트 크기, 길면 줄바꿈 */}
+            <div 
+              className="text-white font-light font-pretendard leading-tight break-words"
+              style={{ 
+                fontSize: 'clamp(20px, 5.5vw, 28px)',
+                wordBreak: 'keep-all',
+                overflowWrap: 'break-word',
+                lineHeight: '1.2',
+                maxHeight: '3.6em',
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
+              {content.title}
+            </div>
+
+            {/* OTT 제공자 로고들 - 하단 왼쪽 (최대 6개) */}
+            {content.ott_providers && content.ott_providers.length > 0 && (
+              <div className="flex gap-2 mt-1 flex-wrap">
+                {content.ott_providers.slice(0, 6).map((provider, index) => (
+                  <div
+                    key={provider.provider_id || index}
+                    className="w-5 h-5 rounded-[6px] overflow-hidden bg-white/5 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+                  >
+                    {provider.logo_path ? (
+                      <img
+                        src={provider.logo_path}
+                        alt={provider.provider_name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          // 이미지 로드 실패 시 대체 처리
+                          const target = e.target as HTMLImageElement
+                          target.style.display = 'none'
+                          const parent = target.parentElement
+                          if (parent) {
+                            parent.innerHTML = `<span class="text-[8px] text-white font-medium truncate px-0.5">${provider.provider_name}</span>`
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="text-[8px] text-white font-medium truncate px-0.5">
+                        {provider.provider_name}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 작은 포스터 썸네일 - 우하단 */}
+          {content.poster_url && (
+            <img
+              src={content.poster_url}
+              alt={`${content.title} poster`}
+              className="w-[84px] h-[120px] object-cover rounded-[6px] flex-shrink-0"
+            />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
