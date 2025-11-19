@@ -95,8 +95,8 @@ export default function Search() {
               ? 'bg-white border-2 border-[#2e2c6a]' 
               : 'bg-[#f0f2f4] border-2 border-transparent'
           }`}>
-            {!focused && (
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+            {!focused && !query && (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="shrink-0">
                 <circle cx="9" cy="9" r="7" stroke="#60646C" strokeWidth="1.5" />
                 <path d="M14 14L18 18" stroke="#60646C" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
@@ -131,12 +131,6 @@ export default function Search() {
                 <span className="text-[#60646C] text-sm">✕</span>
               </button>
             )}
-            <button
-              onClick={() => handleSubmit()}
-              className="shrink-0 h-8 px-3 rounded-full bg-[#2e2c6a] text-white text-sm font-medium"
-            >
-              검색
-            </button>
           </div>
         </div>
       </div>
