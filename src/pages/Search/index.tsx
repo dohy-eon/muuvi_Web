@@ -90,11 +90,17 @@ export default function Search() {
               />
             </svg>
           </button>
-          <div className="flex-1 h-11 rounded-[14px] bg-[#f0f2f4] px-3 flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <circle cx="9" cy="9" r="7" stroke="#60646C" strokeWidth="1.5" />
-              <path d="M14 14L18 18" stroke="#60646C" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+          <div className={`flex-1 h-11 rounded-[14px] px-3 flex items-center gap-2 transition-all ${
+            focused 
+              ? 'bg-white border-2 border-[#2e2c6a]' 
+              : 'bg-[#f0f2f4] border-2 border-transparent'
+          }`}>
+            {!focused && (
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <circle cx="9" cy="9" r="7" stroke="#60646C" strokeWidth="1.5" />
+                <path d="M14 14L18 18" stroke="#60646C" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            )}
             <input
               ref={inputRef}
               className="flex-1 h-full bg-transparent outline-none text-[15px] placeholder:text-[#9aa0a6]"
@@ -112,7 +118,7 @@ export default function Search() {
                 }
               }}
             />
-            {query && (
+            {!focused && query && (
               <button
                 onClick={() => {
                   setQuery('')
