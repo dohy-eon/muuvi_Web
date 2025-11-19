@@ -1,15 +1,19 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { RecoilRoot } from 'recoil'
-import Onboarding from './pages/Onboarding'
-import OnboardingStep2 from './pages/Onboarding/Step2'
-import Main from './pages/Main'
-import Content from './pages/Content'
-import MyPage from './pages/MyPage'
-import Settings from './pages/Settings'
-import Splash from './pages/Splash'
-import Search from './pages/Search'
-import ContentTMDB from './pages/ContentTMDB'
+import { lazy, Suspense } from 'react'
 import AuthProvider from './components/AuthProvider'
+import SimpleLoading from './components/SimpleLoading'
+
+// Lazy load pages for code splitting
+const Splash = lazy(() => import('./pages/Splash'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const OnboardingStep2 = lazy(() => import('./pages/Onboarding/Step2'))
+const Main = lazy(() => import('./pages/Main'))
+const Content = lazy(() => import('./pages/Content'))
+const ContentTMDB = lazy(() => import('./pages/ContentTMDB'))
+const MyPage = lazy(() => import('./pages/MyPage'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Search = lazy(() => import('./pages/Search'))
 
 export default function App() {
   return (
@@ -21,18 +25,20 @@ export default function App() {
         >
           <div className="w-full max-w-[375px] min-h-screen relative">
             <AuthProvider>
-              <Routes>
-                <Route path="/splash" element={<Splash />} />
-                <Route path="/onboarding" element={<Onboarding />} />
-                <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
-                <Route path="/main" element={<Main />} />
-                <Route path="/content/:id" element={<Content />} />
-                <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
-                <Route path="/mypage" element={<MyPage />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/search" element={<Search />} />
-                <Route path="/" element={<Splash />} />
-              </Routes>
+              <Suspense fallback={<SimpleLoading />}>
+                <Routes>
+                  <Route path="/splash" element={<Splash />} />
+                  <Route path="/onboarding" element={<Onboarding />} />
+                  <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
+                  <Route path="/main" element={<Main />} />
+                  <Route path="/content/:id" element={<Content />} />
+                  <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
+                  <Route path="/mypage" element={<MyPage />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/search" element={<Search />} />
+                  <Route path="/" element={<Splash />} />
+                </Routes>
+              </Suspense>
             </AuthProvider>
           </div>
         </div>
