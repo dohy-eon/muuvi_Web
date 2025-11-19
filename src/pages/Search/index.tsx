@@ -34,7 +34,7 @@ export default function Search() {
   }, [recent])
 
   const trending = useMemo(
-    () => ['인기', '최신', '액션', '로맨스', '스릴러', '코미디', 'SF', '드라마'],
+    () => ['태풍상사', '피지컬: 아시아', '환승연애', '위키드', '제4차 사랑혁명'],
     []
   )
 
@@ -71,9 +71,24 @@ export default function Search() {
           <button
             onClick={() => navigate(-1)}
             aria-label="뒤로가기"
-            className="shrink-0 w-9 h-9 rounded-full bg-[#2e2c6a]/10 flex items-center justify-center"
+            className="shrink-0 flex items-center justify-center"
           >
-            <span className="inline-block w-0 h-0 border-y-8 border-y-transparent border-r-8 border-r-[#2e2c6a]" />
+            <svg 
+              width="28" 
+              height="28" 
+              viewBox="0 0 28 28" 
+              fill="none"
+              className="transform -translate-x-0.5"
+            >
+              <path 
+                d="M16 8L10 14L16 20" 
+                stroke="#2e2c6a" 
+                strokeWidth="3" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
           </button>
           <div className="flex-1 h-11 rounded-[14px] bg-[#f0f2f4] px-3 flex items-center gap-2">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -83,7 +98,7 @@ export default function Search() {
             <input
               ref={inputRef}
               className="flex-1 h-full bg-transparent outline-none text-[15px] placeholder:text-[#9aa0a6]"
-              placeholder="작품, 배우, 키워드 검색"
+              placeholder="작품 이름으로 검색"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setFocused(true)}
