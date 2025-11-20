@@ -655,12 +655,91 @@ async function saveContentToSupabase(
       contentType = isTVContent ? 'tv' : 'movie';
     }
 
-    // [최적화] 상세정보와 OTT 정보를 병렬로 호출
-    const [details, rawOttProviders] = await Promise.all([
-      getContentDetailsFromTMDB(movie.id, contentType),
+    // [최적화] 한국어/영어 상세 정보 및 OTT 정보를 병렬로 가져오기
+    const endpoint = contentType === 'tv' ? 'tv' : 'movie'
+    const [responseKo, responseEn, rawOttProviders] = await Promise.all([
+      fetch(
+        `${TMDB_BASE_URL}/${endpoint}/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
+      ),
+      fetch(
+        `${TMDB_BASE_URL}/${endpoint}/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=keywords&language=en-US`
+      ).catch(() => null), // 영어 정보 실패해도 계속 진행
       getWatchProvidersFromTMDB(movie.id, contentType)
     ]);
-    let ottProviders = rawOttProviders;
+    
+    // 한국어 데이터 처리
+    if (!responseKo || !responseKo.ok) {
+      console.warn(`[상세 정보 누락] ID: ${movie.id}`)
+      return null
+    }
+    
+    const dataKo = await responseKo.json()
+    
+    // 한국어 키워드 파싱
+    const keywordsRawKo = dataKo.keywords
+    let keywordsKo: TMDBKeyword[] = []
+    if (keywordsRawKo) {
+      if (Array.isArray(keywordsRawKo.results)) {
+        keywordsKo = keywordsRawKo.results
+      } else if (Array.isArray(keywordsRawKo.keywords)) {
+        keywordsKo = keywordsRawKo.keywords
+      }
+    }
+    
+    const detailsKo = {
+      imdbId: dataKo.external_ids?.imdb_id || null,
+      credits: dataKo.credits,
+      videos: dataKo.videos,
+      genres: Array.isArray(dataKo.genres) ? dataKo.genres : [],
+      keywords: keywordsKo,
+      title: contentType === 'tv' ? dataKo.name : dataKo.title,
+      description: dataKo.overview,
+    }
+    
+    // 영어 데이터 처리 (선택적)
+    let detailsEn: {
+      title?: string
+      description?: string
+      keywords?: TMDBKeyword[]
+    } | null = null
+    
+    if (responseEn) {
+      if (responseEn.ok) {
+        try {
+          const dataEn = await responseEn.json()
+          
+          // 영어 키워드 파싱
+          const keywordsRawEn = dataEn.keywords
+          let keywordsEn: TMDBKeyword[] = []
+          if (keywordsRawEn) {
+            if (Array.isArray(keywordsRawEn.results)) {
+              keywordsEn = keywordsRawEn.results
+            } else if (Array.isArray(keywordsRawEn.keywords)) {
+              keywordsEn = keywordsRawEn.keywords
+            }
+          }
+          
+          detailsEn = {
+            title: contentType === 'tv' ? dataEn.name : dataEn.title,
+            description: dataEn.overview,
+            keywords: keywordsEn,
+          }
+        } catch (error) {
+          console.warn(`[영어 정보 파싱 실패] ID: ${movie.id}:`, error)
+        }
+      } else {
+        // [추가] 실패 로그 - Rate Limit 등 원인 파악을 위해
+        console.warn(`[영어 데이터 실패] ID: ${movie.id}, Status: ${responseEn.status} ${responseEn.statusText}`)
+        if (responseEn.status === 429) {
+          console.warn(`[Rate Limit 감지] ID: ${movie.id} - 잠시 대기 후 재시도 가능`)
+        }
+      }
+    } else {
+      console.warn(`[영어 데이터 요청 실패] ID: ${movie.id} - 네트워크 오류 또는 요청 미완료`)
+    }
+    
+    const details = detailsKo // 메인 로직은 한국어 데이터 기준
+    let ottProviders = rawOttProviders
     
     const imdbId = details?.imdbId || null;
 
@@ -715,7 +794,7 @@ async function saveContentToSupabase(
     // [수정] 태그 생성 로직 분리 (Ko / En)
     const genreIdSet = new Set<number>(movie.genre_ids || [])
     if (details?.genres) {
-      details.genres.forEach((genre) => {
+      details.genres.forEach((genre: TMDBGenre) => {
         if (typeof genre?.id === 'number') {
           genreIdSet.add(genre.id)
         }
@@ -783,6 +862,8 @@ async function saveContentToSupabase(
     })
     
     // [키워드 태그] TMDB 키워드 기반 태그 보강
+    
+    // (1) 한국어 키워드 처리 - 한국어 태그에 추가
     if (details?.keywords && details.keywords.length > 0) {
       const keywordTranslation: Record<string, string> = {
         'historical drama': '사극',
@@ -816,9 +897,6 @@ async function saveContentToSupabase(
       details.keywords.forEach((keyword) => {
         if (!keyword?.name) return
 
-        // 영어 태그는 그대로 추가
-        tagsEn.push(keyword.name)
-
         // 한국어 태그는 번역해서 추가
         const normalized = keyword.name.trim().toLowerCase()
         if (!normalized) return
@@ -840,6 +918,15 @@ async function saveContentToSupabase(
       if (keywordTags.size > 0) {
         tagsKo = [...tagsKo, ...keywordTags]
       }
+    }
+
+    // (2) 영어 키워드 처리 - 영어 태그에 추가 (detailsEn 사용)
+    if (detailsEn?.keywords && detailsEn.keywords.length > 0) {
+      detailsEn.keywords.forEach((keyword) => {
+        if (keyword?.name) {
+          tagsEn.push(keyword.name) // 영어 원문 그대로 추가
+        }
+      })
     }
 
     // [무드 태그] 선택된 무드를 기반으로 태그 추가
@@ -982,9 +1069,14 @@ async function saveContentToSupabase(
 
     // [수정] 제목과 줄거리 - details에서 가져오거나 movie에서 fallback
     const contentTitle = details?.title || movie.title || movie.name || '';
-    const contentTitleEn = details?.titleEn || null;
+    
+    // 영어 제목 Fallback 우선순위:
+    // 1. 영어 상세 제목 -> 2. 원제(Original Title) -> 3. 한국어 제목(최후의 수단)
+    const contentTitleEn = detailsEn?.title || movie.original_title || movie.original_name || contentTitle;
+    
     const contentDescription = details?.description || movie.overview || null;
-    const contentDescriptionEn = details?.descriptionEn || null;
+    // 영어 줄거리가 없으면 null (UI에서 한국어를 보여주거나 'No description' 처리)
+    const contentDescriptionEn = detailsEn?.description || null;
 
     if (!contentTitle) {
       console.warn('제목이 없는 콘텐츠:', movie.id);
@@ -996,9 +1088,9 @@ async function saveContentToSupabase(
 
     const contentData = {
       title: contentTitle,
-      title_en: contentTitleEn, // [추가] 영어 제목
+      title_en: contentTitleEn, // [수정] Fallback 적용
       description: contentDescription,
-      description_en: contentDescriptionEn, // [추가] 영어 줄거리
+      description_en: contentDescriptionEn, // 영어 줄거리 (없으면 null)
       poster_url: movie.poster_path
         ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
         : null,
@@ -1099,17 +1191,45 @@ export async function fetchAndSaveRecommendations(
     const genreType = isTV ? 'tv' : 'movie';
     const { genreMapKo, genreMapEn } = await getGenreMaps(genreType);
 
-    // 3. [최적화] 20개 콘텐츠 저장을 병렬로 실행
-    const savePromises = movies.map(movie => 
-      saveContentToSupabase(movie, genre, genreMapKo, genreMapEn, moods)
-    );
+    // =====================================================================
+    // [수정] 병렬 처리(Promise.all) -> 순차 처리(for...of)로 변경
+    // 이유: 과도한 동시 요청으로 인한 TMDB Rate Limit(429 Error) 방지 및
+    //       영어 데이터 누락(null) 방지
+    // =====================================================================
     
-    const savedContents = (await Promise.all(savePromises)).filter(Boolean) as Content[];
+    const savedContents: Content[] = []
     
-    const ottFiltered = movies.length - savedContents.length;
-    console.log(`[${genre}+${moods}] 저장 완료: ${savedContents.length} / ${movies.length}개 (OTT 없음: ${ottFiltered}개)`);
+    console.log(`[저장 시작] 총 ${movies.length}개 콘텐츠를 순차적으로 저장합니다...`)
 
-    return savedContents;
+    for (const [index, movie] of movies.entries()) {
+      // 진행 상황 로깅 (5개마다)
+      if (index % 5 === 0 && index > 0) {
+        console.log(`[진행 중] ${index}/${movies.length} 처리 완료`)
+      }
+
+      const saved = await saveContentToSupabase(
+        movie, 
+        genre, 
+        genreMapKo, 
+        genreMapEn, 
+        moods
+      )
+      
+      if (saved) {
+        savedContents.push(saved)
+      }
+      
+      // (선택 사항) 안전성을 위해 각 요청 사이에 약간의 딜레이 추가 (0.1초)
+      // Rate Limit 방지를 위한 최소 대기 시간
+      if (index < movies.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+    
+    const ottFiltered = movies.length - savedContents.length
+    console.log(`[${genre}+${moods}] 저장 완료: ${savedContents.length} / ${movies.length}개 (OTT 없음/실패: ${ottFiltered}개)`)
+
+    return savedContents
     
   } catch (error) {
     console.error('추천 콘텐츠 가져오기 실패:', error);
