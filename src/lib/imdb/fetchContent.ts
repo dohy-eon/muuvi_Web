@@ -682,7 +682,7 @@ async function saveContentToSupabase(
       }
     }
 
-    // [최적화] 장르 API 호출 제거 (인자로 받은 맵 사용)
+    // [수정] 태그 생성 로직 분리 (Ko / En)
     const genreIdSet = new Set<number>(movie.genre_ids || [])
     if (details?.genres) {
       details.genres.forEach((genre) => {
@@ -693,18 +693,24 @@ async function saveContentToSupabase(
     }
 
     const genreIds = Array.from(genreIdSet)
-    const genres = genreIds.map((id) => genreMapKo[id] || '').filter(Boolean);
-    const englishTags = genreIds.map((id) => genreMapEn[id] || '').filter(Boolean);
-    let allTags = [...new Set([...genres, ...englishTags])]; // 중복 제거
 
-    // [추가] 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
-    allTags = allTags.flatMap(tag => 
+    // 1. 장르 태그 (기본) - 한국어와 영어 분리
+    let tagsKo: string[] = genreIds.map((id) => genreMapKo[id] || '').filter(Boolean)
+    let tagsEn: string[] = genreIds.map((id) => genreMapEn[id] || '').filter(Boolean)
+
+    // 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
+    tagsKo = tagsKo.flatMap(tag => 
       tag.includes('&') 
         ? tag.split('&').map(t => t.trim()).filter(Boolean)
         : tag
-    );
+    )
+    tagsEn = tagsEn.flatMap(tag => 
+      tag.includes('&') 
+        ? tag.split('&').map(t => t.trim()).filter(Boolean)
+        : tag
+    )
     
-    // [추가] 영문 태그를 한글로 번역
+    // 영문 태그를 한글로 번역 (한국어 태그에 추가)
     const tagTranslation: Record<string, string> = {
       // 장르
       'Action': '액션',
@@ -736,10 +742,15 @@ async function saveContentToSupabase(
       'Kids': '키즈',
       // TV 타입
       'TV Movie': 'TV영화',
-    };
+    }
     
-    // 번역 적용
-    allTags = allTags.map(tag => tagTranslation[tag] || tag);
+    // 영어 태그를 한국어로 번역하여 한국어 태그에 추가
+    tagsEn.forEach(tag => {
+      const translated = tagTranslation[tag]
+      if (translated && !tagsKo.includes(translated)) {
+        tagsKo.push(translated)
+      }
+    })
     
     // [키워드 태그] TMDB 키워드 기반 태그 보강
     if (details?.keywords && details.keywords.length > 0) {
@@ -774,6 +785,11 @@ async function saveContentToSupabase(
 
       details.keywords.forEach((keyword) => {
         if (!keyword?.name) return
+
+        // 영어 태그는 그대로 추가
+        tagsEn.push(keyword.name)
+
+        // 한국어 태그는 번역해서 추가
         const normalized = keyword.name.trim().toLowerCase()
         if (!normalized) return
 
@@ -792,15 +808,17 @@ async function saveContentToSupabase(
       })
 
       if (keywordTags.size > 0) {
-        allTags = [...allTags, ...keywordTags]
+        tagsKo = [...tagsKo, ...keywordTags]
       }
     }
 
-    // [무드 태그] 선택된 무드를 기반으로 태그 추가 (예: 공포, 스릴러)
+    // [무드 태그] 선택된 무드를 기반으로 태그 추가
     const moodTagOrder: string[] = []
 
     if (Array.isArray(moodIds) && moodIds.length > 0) {
-      const moodTagsToAdd = new Set<string>()
+      const moodTagsToAddKo = new Set<string>()
+      const moodTagsToAddEn = new Set<string>()
+      
       moodIds.forEach((moodId) => {
         const relatedGenres = MOOD_TO_TMDB_GENRE[moodId] || []
         const hasMatchingGenre =
@@ -808,28 +826,41 @@ async function saveContentToSupabase(
           relatedGenres.some((genreId) => movie.genre_ids?.includes(genreId))
 
         if (options.forceMoodTags || hasMatchingGenre) {
-          const moodDerivedTags = moodsToImdbTags([moodId])
+          const moodDerivedTags = moodsToImdbTags([moodId]) // ['Romance', 'Drama'] 등 반환 가정
+          
+          // 영어 태그 추가
           moodDerivedTags.forEach((tag) => {
-            moodTagsToAdd.add(tag)
+            moodTagsToAddEn.add(tag)
             if (!moodTagOrder.includes(tag)) {
               moodTagOrder.push(tag)
             }
           })
+
+          // 한국어 태그 번역 추가
+          const translatedMoodTags = moodDerivedTags.map(tag => tagTranslation[tag] || tag)
+          translatedMoodTags.forEach((tag) => {
+            moodTagsToAddKo.add(tag)
+          })
         }
       })
 
-      if (moodTagsToAdd.size > 0) {
-        allTags = [...allTags, ...moodTagsToAdd]
+      if (moodTagsToAddEn.size > 0) {
+        tagsEn = [...tagsEn, ...moodTagsToAddEn]
+      }
+      if (moodTagsToAddKo.size > 0) {
+        tagsKo = [...tagsKo, ...moodTagsToAddKo]
       }
     }
 
-    // [추가] 중복 제거 (번역 및 무드 태그 적용 후)
-    allTags = [...new Set(allTags)];
+    // 4. 중복 제거 및 정제
+    tagsKo = [...new Set(tagsKo)]
+    tagsEn = [...new Set(tagsEn)]
 
+    // 무드 태그 순서 적용 (한국어 태그에만)
     if (moodTagOrder.length > 0) {
-      const orderedMoodTags = moodTagOrder.filter((tag) => allTags.includes(tag))
-      const otherTags = allTags.filter((tag) => !orderedMoodTags.includes(tag))
-      allTags = [...orderedMoodTags, ...otherTags]
+      const moodTagsKo = moodTagOrder.map(tag => tagTranslation[tag] || tag).filter(tag => tagsKo.includes(tag))
+      const otherTagsKo = tagsKo.filter((tag) => !moodTagsKo.includes(tag))
+      tagsKo = [...moodTagsKo, ...otherTagsKo]
     }
 
     // [개선] 태그에서 장르 추론 및 정리
@@ -843,39 +874,44 @@ async function saveContentToSupabase(
       '예능': ['리얼리티', '토크쇼'],
     };
     
-    // 태그에서 장르 감지
+    // 태그에서 장르 감지 (한국어 태그 기준)
     let detectedGenre: string | null = null;
     for (const [genre, keywords] of Object.entries(genreKeywords)) {
-      if (keywords.some(keyword => allTags.includes(keyword))) {
+      if (keywords.some(keyword => tagsKo.includes(keyword))) {
         detectedGenre = genre;
-        // 태그에서 장르 키워드 제거
-        allTags = allTags.filter(tag => !keywords.includes(tag));
+        // 태그에서 장르 키워드 제거 (한국어만)
+        tagsKo = tagsKo.filter(tag => !keywords.includes(tag));
         break;
       }
     }
     
     // [추가] 태그가 비었을 경우 기본 태그 추가 (장르 기반)
-    if (allTags.length === 0) {
+    if (tagsKo.length === 0 && tagsEn.length === 0) {
       // selectedGenre 또는 감지된 장르를 기본 태그로 사용
       const baseGenre = selectedGenre || detectedGenre || '영화';
       
-      // 장르별 기본 태그 추가
+      // 장르별 기본 태그 추가 (한국어와 영어 모두)
       if (baseGenre === '예능') {
-        allTags = ['코미디', '리얼리티'];
+        tagsKo = ['코미디', '리얼리티'];
+        tagsEn = ['Comedy', 'Reality'];
       } else if (baseGenre === '애니메이션') {
-        allTags = ['애니메이션'];
+        tagsKo = ['애니메이션'];
+        tagsEn = ['Animation'];
       } else if (baseGenre === '드라마') {
-        allTags = ['드라마'];
+        tagsKo = ['드라마'];
+        tagsEn = ['Drama'];
       } else {
         // 영화는 평점 기반 태그 추가
         if (movie.vote_average >= 7) {
-          allTags = ['명작'];
+          tagsKo = ['명작'];
+          tagsEn = ['Classic'];
         } else {
-          allTags = ['영화'];
+          tagsKo = ['영화'];
+          tagsEn = ['Movie'];
         }
       }
       
-      console.log(`[기본 태그 추가] ${movie.title || movie.name}: ${allTags.join(', ')}`);
+      console.log(`[기본 태그 추가] ${movie.title || movie.name}: KO=${tagsKo.join(', ')}, EN=${tagsEn.join(', ')}`);
     }
     
     // 장르 결정 (우선순위: selectedGenre > 태그에서 감지 > genre_ids로 판단)
@@ -933,7 +969,8 @@ async function saveContentToSupabase(
       imdb_rating: movie.vote_average ? movie.vote_average / 2 : null,
       year: year,
       genre: contentGenre,
-      tags: allTags,
+      tags: tagsKo,      // 한국어 태그
+      tags_en: tagsEn,   // 영어 태그 (추가)
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
       ott_providers: ottProviders && ottProviders.length > 0 ? ottProviders : undefined,
       vector: embedding, // 임베딩 벡터 추가 (null 가능)

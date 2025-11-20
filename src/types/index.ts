@@ -23,7 +23,8 @@ export interface Content {
   year?: number
   genre?: string // '영화', '드라마', '애니메이션', '예능' (Supabase DB의 genre 컬럼)
   genres?: string[] // 장르 배열 (TMDB에서 가져온 장르 목록)
-  tags?: string[]
+  tags?: string[] // 한국어 태그
+  tags_en?: string[] | null // 영어 태그 (추가)
   moods?: string[] // 무드 ID 배열 (예: ['01', '03'])
   url?: string
   ott_providers?: OTTProvider[] // OTT 스트리밍 서비스 정보

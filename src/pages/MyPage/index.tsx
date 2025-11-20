@@ -147,8 +147,9 @@ function LoginPrompt() {
   )
 }
 
-// 장르/태그 색상 매핑
+// 장르/태그 색상 매핑 (영어 키 추가)
 const genreTagColors: Record<string, string> = {
+  // [한국어 매핑]
   '로맨스': 'bg-[#ffbdbd]',
   '코미디': 'bg-[#ffd93d]',
   '공포': 'bg-[#2c2c2c]',
@@ -158,6 +159,32 @@ const genreTagColors: Record<string, string> = {
   '액션': 'bg-[#e74c3c]',
   '드라마': 'bg-[#8fd19e]',
   '미스터리': 'bg-[#7f8c8d]',
+  
+  // [추가] 영어 매핑
+  'Romance': 'bg-[#ffbdbd]',
+  'Horror': 'bg-[#2c2c2c]',
+  'Comedy': 'bg-[#ffd93d]',
+  'Sci-Fi': 'bg-[#003f5c]',
+  'Science Fiction': 'bg-[#003f5c]',
+  'Fantasy': 'bg-[#9b59b6]',
+  'Adventure': 'bg-[#ff8c42]',
+  'Action': 'bg-[#e74c3c]',
+  'Drama': 'bg-[#8fd19e]',
+  'Mystery': 'bg-[#7f8c8d]',
+  'Thriller': 'bg-[#7f8c8d]',
+  'Animation': 'bg-[#9b59b6]',
+  'Crime': 'bg-[#2c2c2c]',
+  'Documentary': 'bg-[#7f8c8d]',
+  'History': 'bg-[#8d6e63]',
+  'Music': 'bg-[#ff6b9d]',
+  'War': 'bg-[#5d4037]',
+  'Western': 'bg-[#d4a574]',
+  'Reality': 'bg-[#ffd93d]',
+  'Talk Show': 'bg-[#8fd19e]',
+  'TV Movie': 'bg-[#9b59b6]',
+  'Movie': 'bg-[#9b59b6]',
+  'Classic': 'bg-[#9b59b6]',
+  
   'default': 'bg-[#9b59b6]',
 }
 
@@ -170,11 +197,17 @@ interface FavoriteContentCardProps {
 function FavoriteContentCard({ content, onRemove, isNotInterested = false }: FavoriteContentCardProps & { onRemove?: () => void }) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
+  const language = useRecoilValue(languageState) // [추가] 언어 상태 사용
   const [isLiked, setIsLiked] = useState(!isNotInterested) // 관심없음이면 좋아요 상태가 아님
   const [isLoading, setIsLoading] = useState(false)
 
-  const genreTags = content.tags && content.tags.length > 0 
-    ? content.tags
+  // [수정] 언어에 따른 태그 선택
+  const sourceTags = (language === 'en' && content.tags_en && content.tags_en.length > 0)
+    ? content.tags_en
+    : content.tags
+
+  const genreTags = sourceTags && sourceTags.length > 0 
+    ? sourceTags
         .flatMap(tag => tag.includes('&') 
           ? tag.split('&').map(t => t.trim()).filter(Boolean)
           : tag

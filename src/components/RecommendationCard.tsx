@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRecoilValue } from 'recoil'
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
-import { userState } from '../recoil/userState'
+import { userState, languageState } from '../recoil/userState'
 import { addFavorite, removeFavorite, isFavorite } from '../lib/supabase/favorites'
 import LikeIcon from '../pages/MyPage/like.svg'
 import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
@@ -14,9 +14,9 @@ interface RecommendationCardProps {
   onCardClick?: (e: React.MouseEvent) => void // 부모에서 클릭 처리
 }
 
-// 장르/태그 색상 매핑 (한글 태그 기반)
+// 장르/태그 색상 매핑 (한국어 및 영어 키 지원)
 const genreTagColors: Record<string, string> = {
-  // 주요 장르
+  // [한국어 매핑]
   '로맨스': 'bg-[#ffbdbd]',
   '공포': 'bg-[#2c2c2c]',
   '코미디': 'bg-[#ffd93d]',
@@ -28,7 +28,6 @@ const genreTagColors: Record<string, string> = {
   '가족': 'bg-[#8fd19e]',
   '미스터리': 'bg-[#7f8c8d]',
   '스릴러': 'bg-[#7f8c8d]',
-  // 추가 장르
   '애니메이션': 'bg-[#9b59b6]',
   '범죄': 'bg-[#2c2c2c]',
   '다큐멘터리': 'bg-[#7f8c8d]',
@@ -39,6 +38,33 @@ const genreTagColors: Record<string, string> = {
   '리얼리티': 'bg-[#ffd93d]',
   '토크쇼': 'bg-[#8fd19e]',
   'TV영화': 'bg-[#9b59b6]',
+  
+  // [추가] 영어 매핑 (한국어와 동일한 색상 매칭)
+  'Romance': 'bg-[#ffbdbd]',
+  'Horror': 'bg-[#2c2c2c]',
+  'Comedy': 'bg-[#ffd93d]',
+  'Sci-Fi': 'bg-[#003f5c]',
+  'Science Fiction': 'bg-[#003f5c]',
+  'Fantasy': 'bg-[#9b59b6]',
+  'Adventure': 'bg-[#ff8c42]',
+  'Action': 'bg-[#e74c3c]',
+  'Drama': 'bg-[#8fd19e]',
+  'Family': 'bg-[#8fd19e]',
+  'Mystery': 'bg-[#7f8c8d]',
+  'Thriller': 'bg-[#7f8c8d]',
+  'Animation': 'bg-[#9b59b6]',
+  'Crime': 'bg-[#2c2c2c]',
+  'Documentary': 'bg-[#7f8c8d]',
+  'History': 'bg-[#8d6e63]',
+  'Music': 'bg-[#ff6b9d]',
+  'War': 'bg-[#5d4037]',
+  'Western': 'bg-[#d4a574]',
+  'Reality': 'bg-[#ffd93d]',
+  'Talk Show': 'bg-[#8fd19e]',
+  'TV Movie': 'bg-[#9b59b6]',
+  'Movie': 'bg-[#9b59b6]',
+  'Classic': 'bg-[#9b59b6]',
+  
   // 기본 색상
   'default': 'bg-[#9b59b6]',
 }
@@ -46,14 +72,19 @@ const genreTagColors: Record<string, string> = {
 export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick }: RecommendationCardProps) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
+  const language = useRecoilValue(languageState) // [추가] 언어 상태 가져오기
   const [isLiked, setIsLiked] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
+  // [수정] 언어에 따른 태그 선택
+  const sourceTags = (language === 'en' && content.tags_en && content.tags_en.length > 0)
+    ? content.tags_en
+    : content.tags
+
   // 실제 장르 태그 사용 (최대 2개)
-  // content.tags에서 실제 TMDB 장르를 가져옴
   // & 기호로 연결된 복합 태그는 분리 (예: "Action & Adventure" → "Action", "Adventure")
-  const genreTags = content.tags && content.tags.length > 0 
-    ? content.tags
+  const genreTags = sourceTags && sourceTags.length > 0 
+    ? sourceTags
         .flatMap(tag => tag.includes('&') 
           ? tag.split('&').map(t => t.trim()).filter(Boolean)
           : tag

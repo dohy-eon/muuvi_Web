@@ -470,8 +470,9 @@ async function getContentRatingAndRuntime(
   }
 }
 
-// 장르/태그 색상 매핑 (RecommendationCard와 동일)
+// 장르/태그 색상 매핑 (RecommendationCard와 동일, 영어 키 추가)
 const genreTagColors: Record<string, string> = {
+  // [한국어 매핑]
   '로맨스': 'bg-[#ffbdbd]',
   '공포': 'bg-[#2c2c2c]',
   '코미디': 'bg-[#ffd93d]',
@@ -493,6 +494,33 @@ const genreTagColors: Record<string, string> = {
   '리얼리티': 'bg-[#ffd93d]',
   '토크쇼': 'bg-[#8fd19e]',
   'TV영화': 'bg-[#9b59b6]',
+  
+  // [추가] 영어 매핑
+  'Romance': 'bg-[#ffbdbd]',
+  'Horror': 'bg-[#2c2c2c]',
+  'Comedy': 'bg-[#ffd93d]',
+  'Sci-Fi': 'bg-[#003f5c]',
+  'Science Fiction': 'bg-[#003f5c]',
+  'Fantasy': 'bg-[#9b59b6]',
+  'Adventure': 'bg-[#ff8c42]',
+  'Action': 'bg-[#e74c3c]',
+  'Drama': 'bg-[#8fd19e]',
+  'Family': 'bg-[#8fd19e]',
+  'Mystery': 'bg-[#7f8c8d]',
+  'Thriller': 'bg-[#7f8c8d]',
+  'Animation': 'bg-[#9b59b6]',
+  'Crime': 'bg-[#2c2c2c]',
+  'Documentary': 'bg-[#7f8c8d]',
+  'History': 'bg-[#8d6e63]',
+  'Music': 'bg-[#ff6b9d]',
+  'War': 'bg-[#5d4037]',
+  'Western': 'bg-[#d4a574]',
+  'Reality': 'bg-[#ffd93d]',
+  'Talk Show': 'bg-[#8fd19e]',
+  'TV Movie': 'bg-[#9b59b6]',
+  'Movie': 'bg-[#9b59b6]',
+  'Classic': 'bg-[#9b59b6]',
+  
   'default': 'bg-[#9b59b6]',
 }
 
@@ -562,9 +590,14 @@ export default function Content() {
     loadContent()
   }, [id])
 
+  // [수정] 언어에 따른 태그 선택
+  const sourceTags = (language === 'en' && content?.tags_en && content.tags_en.length > 0)
+    ? content.tags_en
+    : content?.tags
+
   // 태그 처리 (RecommendationCard와 동일한 로직)
-  const genreTags = content?.tags && content.tags.length > 0 
-    ? content.tags
+  const genreTags = sourceTags && sourceTags.length > 0 
+    ? sourceTags
         .flatMap(tag => tag.includes('&') 
           ? tag.split('&').map(t => t.trim()).filter(Boolean)
           : tag
