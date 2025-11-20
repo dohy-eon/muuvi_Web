@@ -1291,3 +1291,131 @@ export async function importSpecificTVShows(
   }
 }
 
+/**
+ * [추가] IMDB ID로 TMDB ID 찾기 (Find API 사용)
+ */
+async function getTMDBIdByImdbId(imdbId: string, contentType: 'movie' | 'tv' = 'movie'): Promise<number | null> {
+  try {
+    const findUrl = `${TMDB_BASE_URL}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
+    const response = await fetch(findUrl)
+
+    if (!response.ok) {
+      console.warn(`[TMDB Find API 실패] IMDB: ${imdbId}, Status: ${response.status}`)
+      return null
+    }
+
+    const data = await response.json()
+    const results = contentType === 'tv' ? data.tv_results : data.movie_results
+
+    if (results && results.length > 0) {
+      return results[0].id
+    }
+
+    return null
+  } catch (error) {
+    console.error(`[TMDB Find API 오류] IMDB: ${imdbId}:`, error)
+    return null
+  }
+}
+
+/**
+ * [추가] 영화 상세 정보 가져오기 (TMDB API -> TMDBMovie 객체 변환)
+ */
+async function fetchMovieById(tmdbId: number): Promise<TMDBMovie | null> {
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${TMDB_API_KEY}&language=ko-KR`
+    )
+
+    if (!response.ok) {
+      console.warn('[TMDB Movie 상세 호출 실패]', {
+        tmdbId,
+        status: response.status,
+        statusText: response.statusText,
+      })
+      return null
+    }
+
+    const data = await response.json()
+    const genreIds = Array.isArray(data.genres)
+      ? data.genres.map((genre: TMDBGenre) => genre.id)
+      : []
+
+    const movie: TMDBMovie = {
+      id: data.id,
+      title: data.title,
+      original_title: data.original_title,
+      overview: data.overview,
+      poster_path: data.poster_path,
+      backdrop_path: data.backdrop_path,
+      release_date: data.release_date,
+      vote_average: data.vote_average,
+      vote_count: data.vote_count,
+      popularity: data.popularity,
+      genre_ids: genreIds,
+      imdb_id: data.imdb_id,
+      original_language: data.original_language,
+      production_countries: data.production_countries,
+    }
+
+    return movie
+  } catch (error) {
+    console.error(`[TMDB] 영화 상세 정보 가져오기 실패 (ID: ${tmdbId})`, error)
+    return null
+  }
+}
+
+/**
+ * [추가] 특정 IMDB ID의 콘텐츠를 강제로 업데이트하는 함수
+ */
+export async function updateContentByImdbId(imdbId: string, genre: string): Promise<boolean> {
+  try {
+    // 1. 콘텐츠 타입 결정
+    const contentType = (genre === '드라마' || genre === '예능' || genre === '애니메이션') ? 'tv' : 'movie'
+
+    // 2. TMDB ID 찾기
+    const tmdbId = await getTMDBIdByImdbId(imdbId, contentType)
+
+    if (!tmdbId) {
+      console.warn(`[업데이트 실패] TMDB ID를 찾을 수 없음: ${imdbId}`)
+      return false
+    }
+
+    // 3. 상세 정보 가져오기 (영화 vs TV)
+    let contentData: TMDBMovie | null = null
+    if (contentType === 'tv') {
+      contentData = await fetchTVShowById(tmdbId)
+    } else {
+      contentData = await fetchMovieById(tmdbId)
+    }
+
+    if (!contentData) {
+      console.warn(`[업데이트 실패] 상세 정보를 가져올 수 없음: TMDB ${tmdbId}`)
+      return false
+    }
+
+    // 4. 장르 맵 가져오기
+    const { genreMapKo, genreMapEn } = await getGenreMaps(contentType)
+
+    // 5. 저장 (이때 영어 데이터도 함께 가져와서 upsert 됨)
+    const saved = await saveContentToSupabase(
+      contentData,
+      genre, // 기존 장르 유지
+      genreMapKo,
+      genreMapEn,
+      [], // 무드 ID는 기존 태그 유지를 위해 비워둠 (필요시 DB에서 가져와야 함)
+      { forceSaveOTT: true } // 기존에 있던 거니 OTT 없어도 일단 유지
+    )
+
+    if (saved) {
+      console.log(`[업데이트 완료] ${saved.title} (${saved.title_en || '영어 제목 없음'})`)
+      return true
+    }
+
+    return false
+  } catch (error) {
+    console.error(`[업데이트 에러] ${imdbId}:`, error)
+    return false
+  }
+}
+
