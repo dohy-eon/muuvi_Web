@@ -1,2 +1,7 @@
 node_modules
 .env
+
+# Build output
+dist
+dist-ssr
+*.local

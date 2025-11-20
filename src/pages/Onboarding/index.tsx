@@ -1,8 +1,38 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSetRecoilState } from 'recoil'
-import { onboardingDataState } from '../../recoil/userState'
+import { useRecoilValue, useSetRecoilState } from 'recoil'
+import { onboardingDataState, languageState } from '../../recoil/userState'
 import CheckIcon from './check.svg'
+
+// [추가] 온보딩 페이지 텍스트
+const ONBOARDING_TEXT = {
+  ko: {
+    title: '보고 싶은 장르를\n선택해주세요',
+    prev: '이전',
+    next: '다음',
+  },
+  en: {
+    title: 'Select the genre\nyou want to watch',
+    prev: 'Previous',
+    next: 'Next',
+  },
+}
+
+// [추가] 장르 번역 매핑
+const GENRE_TRANSLATION = {
+  ko: {
+    '영화': '영화',
+    '드라마': '드라마',
+    '애니메이션': '애니메이션',
+    '예능': '예능',
+  },
+  en: {
+    '영화': 'Movie',
+    '드라마': 'Drama',
+    '애니메이션': 'Animation',
+    '예능': 'Variety Show',
+  },
+}
 
 const genres = ['영화', '드라마', '애니메이션', '예능']
 
@@ -10,6 +40,9 @@ export default function Onboarding() {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const navigate = useNavigate()
   const setOnboardingData = useSetRecoilState(onboardingDataState)
+  const language = useRecoilValue(languageState)
+  const t = ONBOARDING_TEXT[language]
+  const genreMap = GENRE_TRANSLATION[language]
 
   const toggleGenre = (genre: string) => {
     setSelectedGenre((prev) => (prev === genre ? null : genre))
@@ -48,10 +81,8 @@ export default function Onboarding() {
       {/* Main Content */}
       <div className="px-5 max-w-md mx-auto flex flex-col justify-center min-h-[calc(100vh-8rem-80px)]">
         {/* Title */}
-        <h1 className="text-center text-black text-2xl font-semibold mb-16 leading-tight">
-          보고 싶은 장르를
-          <br />
-          선택해주세요
+        <h1 className="text-center text-black text-2xl font-semibold mb-16 leading-tight whitespace-pre-line">
+          {t.title}
         </h1>
 
         {/* Genre Selection */}
@@ -73,7 +104,7 @@ export default function Onboarding() {
                     : undefined
                 }
               >
-                <span className="text-base font-semibold">{genre}</span>
+                <span className="text-base font-semibold">{genreMap[genre as keyof typeof genreMap] || genre}</span>
                 {isSelected && (
                   <div className="absolute right-4 w-6 h-6 flex items-center justify-center">
                     <img src={CheckIcon} alt="check" className="w-6 h-6" />
@@ -96,7 +127,7 @@ export default function Onboarding() {
         }}
       >
         <button className="flex-1 h-12 bg-gray-300 rounded-[10px] flex items-center justify-center">
-          <span className="text-white text-base font-semibold">이전</span>
+          <span className="text-white text-base font-semibold">{t.prev}</span>
         </button>
         <button
           onClick={handleNext}
@@ -112,7 +143,7 @@ export default function Onboarding() {
           }
           disabled={selectedGenre === null}
         >
-          <span className="text-base font-semibold">다음</span>
+          <span className="text-base font-semibold">{t.next}</span>
         </button>
       </div>
     </div>

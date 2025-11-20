@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useRecoilValue } from 'recoil'
+import { languageState } from '../../recoil/userState'
 import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content, OTTProvider } from '../../types'
 import BottomNavigation from '../../components/BottomNavigation'
@@ -7,6 +9,64 @@ import SimpleLoading from '../../components/SimpleLoading'
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+
+// [추가] UI 텍스트 번역
+const CONTENT_TEXT = {
+  ko: {
+    originalTitle: '원제',
+    genre: '장르',
+    releaseDate: '개봉일',
+    rating: '연령등급',
+    runtime: '러닝타임',
+    watch: '보러가기',
+    castCrew: '출연진/제작진',
+    castMore: '출연진/제작진 더보기',
+    media: '영상 및 포스터 콜라주',
+    director: '감독',
+    writer: '극본',
+    year: '년',
+    noContent: '콘텐츠를 찾을 수 없습니다.',
+    error: '콘텐츠를 불러오는 중 오류가 발생했습니다.',
+    noOtt: '시청 가능한 플랫폼이 없습니다.',
+    noOttType: '해당 타입으로 시청 가능한 플랫폼이 없습니다.',
+    noCast: '출연진 정보가 없습니다.',
+    noCrew: '제작진 정보가 없습니다.',
+    noMedia: '영상 및 포스터 정보가 없습니다.',
+    actor: '출연',
+    flatrate: '정액제',
+    free: '무료',
+    rent: '대여',
+    buy: '구매',
+    back: '뒤로가기',
+  },
+  en: {
+    originalTitle: 'Original Title',
+    genre: 'Genre',
+    releaseDate: 'Release Date',
+    rating: 'Rating',
+    runtime: 'Runtime',
+    watch: 'Where to Watch',
+    castCrew: 'Cast & Crew',
+    castMore: 'See More Cast & Crew',
+    media: 'Media & Posters',
+    director: 'Director',
+    writer: 'Writer',
+    year: '',
+    noContent: 'Content not found.',
+    error: 'An error occurred while loading content.',
+    noOtt: 'No streaming platforms available.',
+    noOttType: 'No platforms available for this type.',
+    noCast: 'No cast information available.',
+    noCrew: 'No crew information available.',
+    noMedia: 'No media or posters available.',
+    actor: 'Actor',
+    flatrate: 'Stream',
+    free: 'Free',
+    rent: 'Rent',
+    buy: 'Buy',
+    back: 'Back',
+  },
+}
 
 interface TMDBWatchProvider {
   provider_id: number
@@ -410,8 +470,9 @@ async function getContentRatingAndRuntime(
   }
 }
 
-// 장르/태그 색상 매핑 (RecommendationCard와 동일)
+// 장르/태그 색상 매핑 (RecommendationCard와 동일, 영어 키 추가)
 const genreTagColors: Record<string, string> = {
+  // [한국어 매핑]
   '로맨스': 'bg-[#ffbdbd]',
   '공포': 'bg-[#2c2c2c]',
   '코미디': 'bg-[#ffd93d]',
@@ -433,6 +494,33 @@ const genreTagColors: Record<string, string> = {
   '리얼리티': 'bg-[#ffd93d]',
   '토크쇼': 'bg-[#8fd19e]',
   'TV영화': 'bg-[#9b59b6]',
+  
+  // [추가] 영어 매핑
+  'Romance': 'bg-[#ffbdbd]',
+  'Horror': 'bg-[#2c2c2c]',
+  'Comedy': 'bg-[#ffd93d]',
+  'Sci-Fi': 'bg-[#003f5c]',
+  'Science Fiction': 'bg-[#003f5c]',
+  'Fantasy': 'bg-[#9b59b6]',
+  'Adventure': 'bg-[#ff8c42]',
+  'Action': 'bg-[#e74c3c]',
+  'Drama': 'bg-[#8fd19e]',
+  'Family': 'bg-[#8fd19e]',
+  'Mystery': 'bg-[#7f8c8d]',
+  'Thriller': 'bg-[#7f8c8d]',
+  'Animation': 'bg-[#9b59b6]',
+  'Crime': 'bg-[#2c2c2c]',
+  'Documentary': 'bg-[#7f8c8d]',
+  'History': 'bg-[#8d6e63]',
+  'Music': 'bg-[#ff6b9d]',
+  'War': 'bg-[#5d4037]',
+  'Western': 'bg-[#d4a574]',
+  'Reality': 'bg-[#ffd93d]',
+  'Talk Show': 'bg-[#8fd19e]',
+  'TV Movie': 'bg-[#9b59b6]',
+  'Movie': 'bg-[#9b59b6]',
+  'Classic': 'bg-[#9b59b6]',
+  
   'default': 'bg-[#9b59b6]',
 }
 
@@ -441,6 +529,9 @@ type OttFilterType = 'flatrate' | 'free' | 'rent' | 'buy' | null
 export default function Content() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // [추가] 언어 상태 가져오기
+  const language = useRecoilValue(languageState)
+  const t = CONTENT_TEXT[language]
   const [content, setContent] = useState<Content | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -468,7 +559,7 @@ export default function Content() {
         const data = await getContentById(id)
         
         if (!data) {
-          setError('콘텐츠를 찾을 수 없습니다.')
+          setError(t.noContent)
         } else {
           setContent(data)
           
@@ -490,7 +581,7 @@ export default function Content() {
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
-        setError('콘텐츠를 불러오는 중 오류가 발생했습니다.')
+        setError(t.error)
       } finally {
         setIsLoading(false)
       }
@@ -499,9 +590,14 @@ export default function Content() {
     loadContent()
   }, [id])
 
+  // [수정] 언어에 따른 태그 선택
+  const sourceTags = (language === 'en' && content?.tags_en && content.tags_en.length > 0)
+    ? content.tags_en
+    : content?.tags
+
   // 태그 처리 (RecommendationCard와 동일한 로직)
-  const genreTags = content?.tags && content.tags.length > 0 
-    ? content.tags
+  const genreTags = sourceTags && sourceTags.length > 0 
+    ? sourceTags
         .flatMap(tag => tag.includes('&') 
           ? tag.split('&').map(t => t.trim()).filter(Boolean)
           : tag
@@ -609,12 +705,12 @@ export default function Content() {
     return (
       <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
         <div className="flex flex-col items-center justify-center h-full px-6 bg-white">
-          <div className="text-red-600 mb-4">{error || '콘텐츠를 찾을 수 없습니다.'}</div>
+          <div className="text-red-600 mb-4">{error || t.noContent}</div>
           <button
             onClick={() => navigate(-1)}
             className="px-4 py-2 bg-[#2e2c6a] text-white rounded-lg hover:bg-[#3a3878] transition-colors"
           >
-            뒤로가기
+            {t.back}
           </button>
         </div>
         <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
@@ -634,7 +730,7 @@ export default function Content() {
         <button
           onClick={() => navigate(-1)}
           className="absolute top-[20px] left-5 z-20 w-6 h-6 flex items-center justify-center"
-          aria-label="뒤로가기"
+          aria-label={t.back}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -654,7 +750,7 @@ export default function Content() {
           <>
             <img
               src={content.poster_url}
-              alt={content.title}
+              alt={(language === 'en' && content.title_en) ? content.title_en : content.title}
               className="absolute inset-0 w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black" />
@@ -665,12 +761,14 @@ export default function Content() {
         <div className="absolute inset-0 flex flex-col justify-end pb-4 px-5">
           {/* 제목 */}
           <h1 className="text-[20px] font-bold text-white mb-1 text-center">
-            {content.title}
+            {/* [수정] 언어에 따른 제목 선택 */}
+            {(language === 'en' && content.title_en) ? content.title_en : content.title}
           </h1>
           
           {/* 장르 • 연도 */}
           <p className="text-[14px] font-normal text-white text-center mb-4">
-            {content.genre || '영화'} • {content.year || ''}
+            {/* [수정] 언어에 따른 장르 선택 */}
+            {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || (language === 'en' ? 'Movie' : '영화'))} • {content.year || ''}
           </p>
           
           {/* OTT 아이콘 및 장르 태그 */}
@@ -718,7 +816,7 @@ export default function Content() {
             <div className="absolute right-[20px] bottom-[20px] w-[84px] h-[120px] rounded-[6px] overflow-hidden">
               <img
                 src={content.poster_url}
-                alt={`${content.title} poster`}
+                alt={`${(language === 'en' && content.title_en) ? content.title_en : content.title} poster`}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -727,10 +825,11 @@ export default function Content() {
       </div>
 
       {/* 줄거리 섹션 (검은 배경) */}
-      {content.description && (
+      {((language === 'en' && content.description_en) || content.description) && (
         <div className="w-full min-h-[105px] bg-[#010100] px-5 py-4">
           <p className="text-[14px] font-normal text-white leading-[1.5]">
-            {content.description}
+            {/* [수정] 언어에 따른 줄거리 선택 */}
+            {(language === 'en' && content.description_en) ? content.description_en : content.description}
           </p>
         </div>
       )}
@@ -740,15 +839,16 @@ export default function Content() {
         <div className="space-y-[15px]">
           {/* 원제 */}
           <div className="flex items-start">
-            <p className="text-[14px] font-normal text-gray-700 w-[93px]">원제</p>
+            <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.originalTitle}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
-              {content.title || '-'}
+              {/* [수정] 원제는 언어에 따라 표시 (원제는 원래 언어의 제목이므로 반대로 표시) */}
+              {(language === 'en' ? content.title : (content.title_en || content.title)) || '-'}
             </p>
           </div>
           
           {/* 장르 */}
           <div className="flex items-start">
-            <p className="text-[14px] font-normal text-gray-700 w-[93px]">장르</p>
+            <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.genre}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
               {content.genres?.join(', ') || content.tags?.join(', ') || '-'}
             </p>
@@ -756,15 +856,15 @@ export default function Content() {
           
           {/* 개봉일 */}
           <div className="flex items-start">
-            <p className="text-[14px] font-normal text-gray-700 w-[93px]">개봉일</p>
+            <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.releaseDate}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
-              {content.year ? `${content.year}년` : '-'}
+              {content.year ? `${content.year}${t.year}` : '-'}
             </p>
           </div>
           
           {/* 연령등급 */}
           <div className="flex items-start">
-            <p className="text-[14px] font-normal text-gray-700 w-[93px]">연령등급</p>
+            <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.rating}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
               {ageRating || '-'}
             </p>
@@ -772,7 +872,7 @@ export default function Content() {
           
           {/* 러닝타임 */}
           <div className="flex items-start">
-            <p className="text-[14px] font-normal text-gray-700 w-[93px]">러닝타임</p>
+            <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.runtime}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
               {runtime || '-'}
             </p>
@@ -782,7 +882,7 @@ export default function Content() {
 
       {/* 보러가기 섹션 */}
       <div className="px-5 mb-6">
-        <h2 className="text-[16px] font-bold text-black mb-4">보러가기</h2>
+        <h2 className="text-[16px] font-bold text-black mb-4">{t.watch}</h2>
         
         {/* OTT 필터 (정액제, 무료, 대여, 구매) */}
         <div className="flex items-center gap-6 mb-4">
@@ -790,28 +890,28 @@ export default function Content() {
             onClick={() => handleFilterClick('flatrate')}
             className={`flex flex-col items-center gap-1 ${selectedFilter === 'flatrate' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
           >
-            <p className="text-[16px] font-normal text-black">정액제 {flatrateCount}</p>
+            <p className="text-[16px] font-normal text-black">{t.flatrate} {flatrateCount}</p>
             <div className={`w-[55px] h-[2px] border-b ${selectedFilter === 'flatrate' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
           </button>
           <button
             onClick={() => handleFilterClick('free')}
             className={`flex flex-col items-center gap-1 ${selectedFilter === 'free' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
           >
-            <p className="text-[16px] font-normal text-black">무료 {freeCount}</p>
+            <p className="text-[16px] font-normal text-black">{t.free} {freeCount}</p>
             <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'free' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
           </button>
           <button
             onClick={() => handleFilterClick('rent')}
             className={`flex flex-col items-center gap-1 ${selectedFilter === 'rent' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
           >
-            <p className="text-[16px] font-normal text-black">대여 {rentCount}</p>
+            <p className="text-[16px] font-normal text-black">{t.rent} {rentCount}</p>
             <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'rent' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
           </button>
           <button
             onClick={() => handleFilterClick('buy')}
             className={`flex flex-col items-center gap-1 ${selectedFilter === 'buy' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
           >
-            <p className="text-[16px] font-normal text-black">구매 {buyCount}</p>
+            <p className="text-[16px] font-normal text-black">{t.buy} {buyCount}</p>
             <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'buy' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
           </button>
         </div>
@@ -854,9 +954,7 @@ export default function Content() {
             ))
           ) : (
             <p className="text-[14px] font-normal text-gray-500 text-center py-4">
-              {selectedFilter 
-                ? '해당 타입으로 시청 가능한 플랫폼이 없습니다.'
-                : '시청 가능한 플랫폼이 없습니다.'}
+              {selectedFilter ? t.noOttType : t.noOtt}
             </p>
           )}
         </div>
@@ -864,7 +962,7 @@ export default function Content() {
 
       {/* 출연진/제작진 섹션 */}
       <div className="px-5 mb-6">
-        <h2 className="text-[16px] font-semibold text-black mb-4">출연진/제작진</h2>
+        <h2 className="text-[16px] font-semibold text-black mb-4">{t.castCrew}</h2>
         
         {/* 출연진 그리드 */}
         {cast.length > 0 ? (
@@ -889,9 +987,9 @@ export default function Content() {
                 <div className="bg-gray-900 rounded-[10px] px-1.5 py-0.5 mb-1 w-full min-w-0">
                   <span 
                     className="text-[14px] font-normal text-white block truncate text-center"
-                    title={actor.character || '출연'}
+                    title={actor.character || t.actor}
                   >
-                    {actor.character || '출연'}
+                    {actor.character || t.actor}
                   </span>
                 </div>
                 {/* 배우명 */}
@@ -906,7 +1004,7 @@ export default function Content() {
           </div>
         ) : (
           <div className="text-[14px] font-normal text-gray-500 text-center py-4">
-            출연진 정보가 없습니다.
+            {t.noCast}
           </div>
         )}
         
@@ -917,7 +1015,7 @@ export default function Content() {
         <div className="space-y-4">
           {director && (
             <div className="flex items-start gap-4">
-              <span className="text-[16px] font-normal text-black flex-shrink-0">감독</span>
+              <span className="text-[16px] font-normal text-black flex-shrink-0">{t.director}</span>
               <span 
                 className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
                 title={director}
@@ -928,7 +1026,7 @@ export default function Content() {
           )}
           {writer && (
             <div className="flex items-start gap-4">
-              <span className="text-[16px] font-normal text-black flex-shrink-0">극본</span>
+              <span className="text-[16px] font-normal text-black flex-shrink-0">{t.writer}</span>
               <span 
                 className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
                 title={writer}
@@ -939,20 +1037,20 @@ export default function Content() {
           )}
           {!director && !writer && (
             <div className="text-[14px] font-normal text-gray-500">
-              제작진 정보가 없습니다.
+              {t.noCrew}
             </div>
           )}
         </div>
         
         {/* 더보기 버튼 */}
         <button className="w-full h-[52px] bg-[#2e2c6a] rounded-[10px] mt-6 flex items-center justify-center">
-          <span className="text-[16px] font-semibold text-white">출연진/제작진 더보기</span>
+          <span className="text-[16px] font-semibold text-white">{t.castMore}</span>
         </button>
       </div>
 
       {/* 영상 및 포스터 콜라주 섹션 */}
       <div className="px-5 mb-6">
-        <h2 className="text-[16px] font-semibold text-black mb-4">영상 및 포스터 콜라주</h2>
+        <h2 className="text-[16px] font-semibold text-black mb-4">{t.media}</h2>
         
         {mediaItems.length > 0 ? (
           <div className="space-y-3">
@@ -1103,7 +1201,7 @@ export default function Content() {
           </div>
         ) : (
           <div className="text-[14px] font-normal text-gray-500 text-center py-4">
-            영상 및 포스터 정보가 없습니다.
+            {t.noMedia}
           </div>
         )}
       </div>

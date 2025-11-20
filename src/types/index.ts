@@ -16,14 +16,18 @@ export interface OTTProvider {
 export interface Content {
   id: string
   title: string
+  title_en?: string | null // 영어 제목 (추가)
   description?: string
+  description_en?: string | null // 영어 줄거리 (추가)
   poster_url?: string
   imdb_id?: string
   imdb_rating?: number
   year?: number
   genre?: string // '영화', '드라마', '애니메이션', '예능' (Supabase DB의 genre 컬럼)
+  genre_en?: string | null // 영어 장르 (추가)
   genres?: string[] // 장르 배열 (TMDB에서 가져온 장르 목록)
-  tags?: string[]
+  tags?: string[] // 한국어 태그
+  tags_en?: string[] | null // 영어 태그 (추가)
   moods?: string[] // 무드 ID 배열 (예: ['01', '03'])
   url?: string
   ott_providers?: OTTProvider[] // OTT 스트리밍 서비스 정보
