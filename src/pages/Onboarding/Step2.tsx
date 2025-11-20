@@ -1,9 +1,31 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRecoilValue, useSetRecoilState } from 'recoil'
-import { onboardingDataState } from '../../recoil/userState'
+import { onboardingDataState, languageState } from '../../recoil/userState'
 import { saveProfile } from '../../lib/supabase/profile'
 import CheckIcon from './check.svg'
+
+// [추가] 온보딩 Step2 페이지 텍스트
+const ONBOARDING_STEP2_TEXT = {
+  ko: {
+    titleWithGenre: (genre: string) => `'${genre}' 장르 중에서\n추천드릴까요?`,
+    titleDefault: '오늘은 어떤 영상으로\n추천드릴까요?',
+    subtitle: '* 최대 2개까지 선택할 수 있어요!',
+    incompatibleMood: (genre: string) => `'${genre}' 장르와 조합하기 어려운 무드입니다.`,
+    prev: '이전',
+    saving: '저장 중...',
+    complete: '완료',
+  },
+  en: {
+    titleWithGenre: (genre: string) => `What should we recommend\nfrom '${genre}' genre?`,
+    titleDefault: 'What should we\nrecommend today?',
+    subtitle: '* You can select up to 2!',
+    incompatibleMood: (genre: string) => `This mood is difficult to combine with '${genre}' genre.`,
+    prev: 'Previous',
+    saving: 'Saving...',
+    complete: 'Complete',
+  },
+}
 
 interface Genre {
   id: string
@@ -93,6 +115,8 @@ export default function OnboardingStep2() {
   const navigate = useNavigate()
   const onboardingData = useRecoilValue(onboardingDataState)
   const setOnboardingData = useSetRecoilState(onboardingDataState)
+  const language = useRecoilValue(languageState)
+  const t = ONBOARDING_STEP2_TEXT[language]
 
   // 현재 선택된 장르 (1단계에서 선택한 장르)
   const selectedGenre = onboardingData?.genre
@@ -108,7 +132,7 @@ export default function OnboardingStep2() {
     const isDisabled = incompatibleMoods.includes(id)
 
     if (isDisabled && selectedGenre) {
-      alert(`'${selectedGenre}' 장르와 조합하기 어려운 무드입니다.`)
+      alert(t.incompatibleMood(selectedGenre))
       return // 선택 방지
     }
 
@@ -180,13 +204,11 @@ export default function OnboardingStep2() {
       {/* Main Content */}
       <div className="px-5 max-w-md mx-auto flex flex-col justify-center min-h-[calc(100vh-8rem-80px)]">
         {/* Title */}
-        <h1 className="text-center text-black text-2xl font-semibold mb-2 leading-tight">
-          {selectedGenre ? `'${selectedGenre}' 장르 중에서` : '오늘은 어떤 영상으로'}
-          <br />
-          추천드릴까요?
+        <h1 className="text-center text-black text-2xl font-semibold mb-2 leading-tight whitespace-pre-line">
+          {selectedGenre ? t.titleWithGenre(selectedGenre) : t.titleDefault}
         </h1>
         <p className="text-center text-primary-900 text-xs font-semibold mb-12">
-          * 최대 2개까지 선택할 수 있어요!
+          {t.subtitle}
         </p>
 
         {/* Genre Grid */}
@@ -219,10 +241,10 @@ export default function OnboardingStep2() {
                   {genre.number}
                 </div>
                 <div className="absolute left-2 top-[21px] text-gray-900 text-xs font-light">
-                  {genre.english}
+                  {language === 'en' ? genre.english : genre.korean}
                 </div>
                 <div className="absolute left-2 bottom-2 pr-10 text-gray-900 text-xs font-bold">
-                  {genre.korean}
+                  {language === 'en' ? genre.korean : genre.korean}
                 </div>
                 <div
                   className={`absolute w-7 h-7 right-2 bottom-2 bg-gradient-to-b ${genre.gradient} rounded-full`}
@@ -253,7 +275,7 @@ export default function OnboardingStep2() {
           className="flex-1 h-12 rounded-[10px] flex items-center justify-center"
           style={{ backgroundColor: '#7a8dd6' }}
         >
-          <span className="text-white text-base font-semibold">이전</span>
+          <span className="text-white text-base font-semibold">{t.prev}</span>
         </button>
         <button
           onClick={handleComplete}
@@ -270,7 +292,7 @@ export default function OnboardingStep2() {
           disabled={selectedGenres.length === 0 || isLoading}
         >
           <span className="text-base font-semibold">
-            {isLoading ? '저장 중...' : '완료'}
+            {isLoading ? t.saving : t.complete}
           </span>
         </button>
       </div>

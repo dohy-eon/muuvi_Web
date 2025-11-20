@@ -1,14 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useRecoilValue } from 'recoil'
 import BottomNavigation from '../../components/BottomNavigation'
+import { languageState } from '../../recoil/userState'
 import { searchTMDB, type NormalizedSearchResult } from '../../lib/tmdb/search'
 
 type SearchResult = NormalizedSearchResult
 
 const RECENT_KEY = 'muuvi_recent_searches_v1'
 
+// [추가] 검색 페이지 텍스트
+const SEARCH_TEXT = {
+  ko: {
+    back: '뒤로가기',
+    placeholder: '작품 이름으로 검색',
+    clear: '지우기',
+    recentSearches: '최근 검색',
+    clearAll: '모두 지우기',
+    trending: '인기 검색어',
+    noResults: '검색 결과가 없어요',
+  },
+  en: {
+    back: 'Go Back',
+    placeholder: 'Search by title',
+    clear: 'Clear',
+    recentSearches: 'Recent Searches',
+    clearAll: 'Clear All',
+    trending: 'Trending',
+    noResults: 'No search results found',
+  },
+}
+
 export default function Search() {
   const navigate = useNavigate()
+  const language = useRecoilValue(languageState)
+  const t = SEARCH_TEXT[language]
   const [query, setQuery] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -34,7 +60,10 @@ export default function Search() {
   }, [recent])
 
   const trending = useMemo(
-    () => ['태풍상사', '피지컬: 아시아', '환승연애', '위키드', '제4차 사랑혁명'],
+    () => {
+      // 인기 검색어는 언어별로 다르게 설정 가능하지만, 현재는 한국어 콘텐츠명 그대로 사용
+      return ['태풍상사', '피지컬: 아시아', '환승연애', '위키드', '제4차 사랑혁명']
+    },
     []
   )
 
@@ -70,7 +99,7 @@ export default function Search() {
         <div className="px-4 pt-3 pb-2 flex items-center gap-2">
           <button
             onClick={() => navigate(-1)}
-            aria-label="뒤로가기"
+            aria-label={t.back}
             className="shrink-0 flex items-center justify-center"
           >
             <svg 
@@ -104,7 +133,7 @@ export default function Search() {
             <input
               ref={inputRef}
               className="flex-1 h-full bg-transparent outline-none text-[15px] placeholder:text-[#9aa0a6]"
-              placeholder="작품 이름으로 검색"
+              placeholder={t.placeholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setFocused(true)}
@@ -125,7 +154,7 @@ export default function Search() {
                   setResults([])
                   inputRef.current?.focus()
                 }}
-                aria-label="지우기"
+                aria-label={t.clear}
                 className="shrink-0 w-8 h-8 rounded-full bg-black/5 flex items-center justify-center"
               >
                 <span className="text-[#60646C] text-sm">✕</span>
@@ -143,7 +172,7 @@ export default function Search() {
             <div className="space-y-8">
               {!!recent.length && (
                 <section>
-                  <h3 className="text-[15px] font-semibold text-[#2e2c6a] mb-3">최근 검색</h3>
+                  <h3 className="text-[15px] font-semibold text-[#2e2c6a] mb-3">{t.recentSearches}</h3>
                   <div className="flex flex-wrap gap-2">
                     {recent.map((item) => (
                       <button
@@ -163,14 +192,14 @@ export default function Search() {
                       onClick={() => setRecent([])}
                       className="text-[12px] text-[#60646C] underline"
                     >
-                      모두 지우기
+                      {t.clearAll}
                     </button>
                   </div>
                 </section>
               )}
 
               <section>
-                <h3 className="text-[15px] font-semibold text-[#2e2c6a] mb-3">인기 검색어</h3>
+                <h3 className="text-[15px] font-semibold text-[#2e2c6a] mb-3">{t.trending}</h3>
                 <div className="flex flex-wrap gap-2">
                   {trending.map((item) => (
                     <button
@@ -240,7 +269,7 @@ export default function Search() {
           {/* 결과 없음 */}
           {!isSearching && query && results.length === 0 && !showEmptyState && (
             <div className="mt-12 text-center">
-              <p className="text-[#60646C]">검색 결과가 없어요</p>
+              <p className="text-[#60646C]">{t.noResults}</p>
             </div>
           )}
         </div>
