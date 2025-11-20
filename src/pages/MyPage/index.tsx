@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRecoilValue } from 'recoil'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { userState } from '../../recoil/userState'
+import { userState, languageState } from '../../recoil/userState'
 import { addFavorite, removeFavorite, getFavorites, getFavoriteCount } from '../../lib/supabase/favorites'
 import { getNotInterestedContents, getNotInterestedCount, removeNotInterested } from '../../lib/supabase/notInterested'
 import BottomNavigation from '../../components/BottomNavigation'
@@ -13,58 +13,93 @@ import LikeCheckedIcon from './likeChecked.svg'
 import RecommendInactive from '../../assets/RecommendInactive.svg'
 import type { Content } from '../../types'
 
+// [추가] 로그인 화면 텍스트
+const LOGIN_TEXT = {
+  ko: {
+    signInGoogle: 'Google로 로그인',
+    signingIn: '로그인 중...',
+    error: '로그인 중 오류가 발생했습니다',
+    providerError: 'Google 제공자가 활성화되지 않았습니다.',
+    providerGuide: 'Supabase 대시보드에서 Google Provider를 활성화해주세요.',
+  },
+  en: {
+    signInGoogle: 'Sign in with Google',
+    signingIn: 'Signing in...',
+    error: 'An error occurred during login',
+    providerError: 'Google provider is not enabled.',
+    providerGuide: 'Please enable Google Provider in Supabase Dashboard.',
+  },
+}
+
+// [추가] 마이페이지 텍스트
+const MYPAGE_TEXT = {
+  ko: {
+    favorites: '찜했어요',
+    notInterested: '관심없어요',
+    subscribed: '구독 중인 서비스',
+    favoriteTitle: '찜한 콘텐츠',
+    noFavorites: '찜한 콘텐츠가 없습니다',
+    notInterestedTitle: '관심없음 콘텐츠',
+    noNotInterested: '관심없음으로 표시한 콘텐츠가 없습니다',
+    randomNickname: '랜덤닉네임',
+  },
+  en: {
+    favorites: 'Favorites',
+    notInterested: 'Not Interested',
+    subscribed: 'Subscribed',
+    favoriteTitle: 'Favorite Content',
+    noFavorites: 'No favorite content yet',
+    notInterestedTitle: 'Not Interested Content',
+    noNotInterested: 'No content marked as not interested',
+    randomNickname: 'RandomUser',
+  },
+}
+
 function LoginPrompt() {
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // [추가] 언어 상태 사용
+  const language = useRecoilValue(languageState)
+  const t = LOGIN_TEXT[language]
 
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true)
       setErrorMessage(null)
-      
-      // 현재 페이지의 origin을 사용하여 redirect URL 생성
+
       const redirectTo = `${window.location.origin}/mypage`
-      
+
       console.log('[Google 로그인 시도]', { redirectTo })
-      
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
-          // queryParams 제거 - Supabase가 직접 처리하도록 함
         },
       })
 
       if (error) {
-        console.error('[Google 로그인 실패]', {
-          message: error.message,
-          status: error.status,
-          error,
-        })
-        
+        console.error('[Google 로그인 실패]', error)
+
         const errorMsg = error.message || ''
-        const isProviderNotEnabled = 
+        const isProviderNotEnabled =
           errorMsg.includes('provider is not enabled') ||
           errorMsg.includes('Unsupported provider') ||
           error.status === 400
-        
+
         if (isProviderNotEnabled) {
-          setErrorMessage(
-            `⚠️ Google 제공자가 활성화되지 않았습니다.\n\n다음 단계를 따라주세요:\n\n1. Supabase 대시보드 접속\n   → Authentication → Providers\n\n2. Google 찾기\n   → "Enable Google" 토글을 켜기\n\n3. Google Cloud Console에서 생성한\n   Client ID와 Client Secret 입력\n\n4. 저장 후 다시 시도`
-          )
+          setErrorMessage(`${t.providerError}\n${t.providerGuide}`)
         } else {
-          setErrorMessage(`로그인 실패: ${error.message || '알 수 없는 오류'}`)
+          setErrorMessage(`${t.error}: ${error.message}`)
         }
         setIsLoading(false)
       } else if (data) {
-        // OAuth 플로우가 시작되면 브라우저가 리디렉션되므로 여기서는 처리할 것이 없음
         console.log('[Google OAuth 리디렉션 시작]', data)
       }
     } catch (error: any) {
       console.error('[Google 로그인 중 예외 발생]', error)
-      setErrorMessage(
-        `로그인 중 오류가 발생했습니다: ${error?.message || '알 수 없는 오류'}`
-      )
+      setErrorMessage(`${t.error}: ${error?.message || ''}`)
       setIsLoading(false)
     }
   }
@@ -95,7 +130,8 @@ function LoginPrompt() {
               className="w-full bg-white border border-[#E3E3E3] rounded-[12px] py-[14px] px-6 flex items-center justify-center gap-3 text-[#101010] text-base font-semibold shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <img src={GoogleLogo} alt="Google" className="w-6 h-6" />
-              <span>{isLoading ? '로그인 중...' : 'Google로 로그인'}</span>
+              {/* [수정] 텍스트 변수 사용 */}
+              <span>{isLoading ? t.signingIn : t.signInGoogle}</span>
             </button>
           </div>
         </div>
@@ -294,6 +330,10 @@ function FavoriteContentCard({ content, onRemove, isNotInterested = false }: Fav
 export default function MyPage() {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
+  // [추가] 언어 상태 사용
+  const language = useRecoilValue(languageState)
+  const t = MYPAGE_TEXT[language]
+
   const [favoriteCount, setFavoriteCount] = useState(0)
   const [notInterestedCount, setNotInterestedCount] = useState(0)
   const [subscribedServiceCount, _setSubscribedServiceCount] = useState(0)
@@ -335,8 +375,7 @@ export default function MyPage() {
     return <LoginPrompt />
   }
 
-  // 사용자 닉네임 (임시로 이메일에서 추출하거나 기본값 사용)
-  const nickname = user.user_metadata?.full_name || user.email?.split('@')[0] || '랜덤닉네임'
+  const nickname = user.user_metadata?.full_name || user.email?.split('@')[0] || t.randomNickname
 
   return (
     <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
@@ -380,7 +419,8 @@ export default function MyPage() {
                 {favoriteCount}
               </div>
               <div className="text-black text-xs font-normal font-pretendard tracking-tight">
-                찜했어요
+                {/* [수정] 텍스트 변수 사용 */}
+                {t.favorites}
               </div>
               {/* 우측 구분선 */}
               <div className="absolute right-0 top-[12px] w-0 h-9 outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
@@ -392,7 +432,8 @@ export default function MyPage() {
                 {notInterestedCount}
               </div>
               <div className="text-black text-xs font-normal font-pretendard tracking-tight">
-                관심없어요
+                {/* [수정] 텍스트 변수 사용 */}
+                {t.notInterested}
               </div>
               {/* 우측 구분선 */}
               <div className="absolute right-0 top-[12px] w-0 h-9 outline outline-1 outline-offset-[-0.5px] outline-[#a8adb3]" />
@@ -404,14 +445,15 @@ export default function MyPage() {
                 {subscribedServiceCount}
               </div>
               <div className="text-black text-xs font-normal font-pretendard tracking-tight">
-                구독 중인 서비스
+                {/* [수정] 텍스트 변수 사용 */}
+                {t.subscribed}
               </div>
             </div>
           </div>
 
           {/* 찜한 콘텐츠 섹션 */}
           <div className="mb-8">
-            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">찜한 콘텐츠</h3>
+            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">{t.favoriteTitle}</h3>
             {favoriteContents.length > 0 ? (
               <div className="overflow-x-auto -mx-5 px-5 show-scrollbar">
                 <div className="flex gap-4 pb-2" style={{ width: 'max-content' }}>
@@ -420,7 +462,6 @@ export default function MyPage() {
                       <FavoriteContentCard 
                         content={content}
                         onRemove={() => {
-                          // 좋아요 취소 시 목록에서 제거
                           setFavoriteContents(prev => prev.filter(c => c.id !== content.id))
                           setFavoriteCount(prev => Math.max(0, prev - 1))
                         }}
@@ -431,14 +472,15 @@ export default function MyPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-[14px] text-gray-500">찜한 콘텐츠가 없습니다</p>
+                {/* [수정] 텍스트 변수 사용 */}
+                <p className="text-[14px] text-gray-500">{t.noFavorites}</p>
               </div>
             )}
           </div>
 
           {/* 관심없음 콘텐츠 섹션 */}
           <div>
-            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">관심없음 콘텐츠</h3>
+            <h3 className="text-[18px] font-semibold text-black mb-4 font-pretendard">{t.notInterestedTitle}</h3>
             {notInterestedContents.length > 0 ? (
               <div className="overflow-x-auto -mx-5 px-5">
                 <div className="flex gap-4" style={{ width: 'max-content' }}>
@@ -448,7 +490,6 @@ export default function MyPage() {
                         content={content}
                         isNotInterested={true}
                         onRemove={async () => {
-                          // 관심없음 취소
                           if (user && content.id) {
                             try {
                               const success = await removeNotInterested(user.id, content.id)
@@ -468,7 +509,8 @@ export default function MyPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-[14px] text-gray-500">관심없음으로 표시한 콘텐츠가 없습니다</p>
+                {/* [수정] 텍스트 변수 사용 */}
+                <p className="text-[14px] text-gray-500">{t.noNotInterested}</p>
               </div>
             )}
           </div>
