@@ -767,7 +767,8 @@ export default function Content() {
           
           {/* 장르 • 연도 */}
           <p className="text-[14px] font-normal text-white text-center mb-4">
-            {content.genre || (language === 'en' ? 'Movie' : '영화')} • {content.year || ''}
+            {/* [수정] 언어에 따른 장르 선택 */}
+            {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || (language === 'en' ? 'Movie' : '영화'))} • {content.year || ''}
           </p>
           
           {/* OTT 아이콘 및 장르 태그 */}

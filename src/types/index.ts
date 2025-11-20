@@ -24,6 +24,7 @@ export interface Content {
   imdb_rating?: number
   year?: number
   genre?: string // '영화', '드라마', '애니메이션', '예능' (Supabase DB의 genre 컬럼)
+  genre_en?: string | null // 영어 장르 (추가)
   genres?: string[] // 장르 배열 (TMDB에서 가져온 장르 목록)
   tags?: string[] // 한국어 태그
   tags_en?: string[] | null // 영어 태그 (추가)

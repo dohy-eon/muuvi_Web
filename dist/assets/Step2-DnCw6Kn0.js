@@ -1,4 +1,4 @@
-import{o as g,l as w,j as e}from"./index-BREGoMZi.js";import{a as h,u as N}from"./react-vendor-BCvJ4SZV.js";import{b as f,a as k}from"./recoil-vendor-BPQO4bvt.js";import{s as C}from"./profile-tCheCMGW.js";import{C as S}from"./check-DFrIQ6KT.js";import"./supabase-vendor-DMkEyeru.js";const D={ko:{titleWithGenre:a=>`'${a}' 장르 중에서
+import{o as g,l as w,j as e}from"./index-C1c4KTub.js";import{a as h,u as N}from"./react-vendor-BCvJ4SZV.js";import{b as f,a as k}from"./recoil-vendor-BPQO4bvt.js";import{s as C}from"./profile-BlIvljn3.js";import{C as S}from"./check-DFrIQ6KT.js";import"./supabase-vendor-DMkEyeru.js";const D={ko:{titleWithGenre:a=>`'${a}' 장르 중에서
 추천드릴까요?`,titleDefault:`오늘은 어떤 영상으로
 추천드릴까요?`,subtitle:"* 최대 2개까지 선택할 수 있어요!",incompatibleMood:a=>`'${a}' 장르와 조합하기 어려운 무드입니다.`,prev:"이전",saving:"저장 중...",complete:"완료"},en:{titleWithGenre:a=>`What should we recommend
 from '${a}' genre?`,titleDefault:`What should we

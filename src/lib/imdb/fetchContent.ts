@@ -1086,6 +1086,15 @@ async function saveContentToSupabase(
     const dateString = movie.release_date || movie.first_air_date || '';
     const year = dateString ? parseInt(dateString.split('-')[0]) : null;
 
+    // [추가] 장르 영어 번역
+    const genreTranslation: Record<string, string> = {
+      '영화': 'Movie',
+      '드라마': 'Drama',
+      '애니메이션': 'Animation',
+      '예능': 'Variety Show',
+    }
+    const contentGenreEn = genreTranslation[contentGenre] || contentGenre
+
     const contentData = {
       title: contentTitle,
       title_en: contentTitleEn, // [수정] Fallback 적용
@@ -1098,6 +1107,7 @@ async function saveContentToSupabase(
       imdb_rating: movie.vote_average ? movie.vote_average / 2 : null,
       year: year,
       genre: contentGenre,
+      genre_en: contentGenreEn, // [추가] 영어 장르
       tags: tagsKo,      // 한국어 태그
       tags_en: tagsEn,   // 영어 태그
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,

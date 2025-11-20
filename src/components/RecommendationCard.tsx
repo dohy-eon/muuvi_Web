@@ -219,7 +219,8 @@ export default function RecommendationCard({ content, isActive = false, distance
           <div className="flex flex-col gap-1.5 flex-1 min-w-0" style={{ maxWidth: 'calc(100% - 100px)' }}>
             {/* 정보 텍스트 */}
             <div className="text-white text-xs font-normal font-pretendard whitespace-nowrap">
-              {content.genre || content.genres?.[0] || '영화'} •{content.year || ''}
+              {/* [수정] 언어에 따른 장르 선택 */}
+              {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || content.genres?.[0] || (language === 'en' ? 'Movie' : '영화'))} •{content.year || ''}
             </div>
 
             {/* 제목 - 반응형 폰트 크기, 길면 줄바꿈 */}
