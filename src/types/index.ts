@@ -16,7 +16,9 @@ export interface OTTProvider {
 export interface Content {
   id: string
   title: string
+  title_en?: string | null // 영어 제목 (추가)
   description?: string
+  description_en?: string | null // 영어 줄거리 (추가)
   poster_url?: string
   imdb_id?: string
   imdb_rating?: number

@@ -432,18 +432,27 @@ async function getContentDetailsFromTMDB(
   videos?: any
   genres?: TMDBGenre[]
   keywords?: TMDBKeyword[]
+  title?: string
+  titleEn?: string | null
+  description?: string
+  descriptionEn?: string | null
 } | null> {
   try {
     const endpoint = contentType === 'tv' ? 'tv' : 'movie'
-    // append_to_response로 여러 정보를 한 번에 가져오기
-    const response = await fetch(
-      `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
-    )
+    // 한국어와 영어 정보를 병렬로 가져오기
+    const [responseKo, responseEn] = await Promise.all([
+      fetch(
+        `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
+      ),
+      fetch(
+        `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&language=en-US`
+      )
+    ])
 
-    if (!response.ok) return null
+    if (!responseKo.ok) return null
 
-    const data = await response.json()
-    const keywordsRaw = data.keywords
+    const dataKo = await responseKo.json()
+    const keywordsRaw = dataKo.keywords
     let keywords: TMDBKeyword[] = []
 
     if (keywordsRaw) {
@@ -454,12 +463,33 @@ async function getContentDetailsFromTMDB(
       }
     }
 
+    // 한국어 정보
+    const title = contentType === 'tv' ? dataKo.name : dataKo.title
+    const description = dataKo.overview
+
+    // 영어 정보 (선택적 - 실패해도 한국어만 반환)
+    let titleEn: string | null = null
+    let descriptionEn: string | null = null
+    if (responseEn.ok) {
+      try {
+        const dataEn = await responseEn.json()
+        titleEn = contentType === 'tv' ? dataEn.name : dataEn.title
+        descriptionEn = dataEn.overview
+      } catch (error) {
+        console.warn('영어 정보 파싱 실패:', error)
+      }
+    }
+
     return {
-      imdbId: data.external_ids?.imdb_id || null,
-      credits: data.credits,
-      videos: data.videos,
-      genres: Array.isArray(data.genres) ? data.genres : [],
+      imdbId: dataKo.external_ids?.imdb_id || null,
+      credits: dataKo.credits,
+      videos: dataKo.videos,
+      genres: Array.isArray(dataKo.genres) ? dataKo.genres : [],
       keywords,
+      title,
+      titleEn,
+      description,
+      descriptionEn,
     }
   } catch (error) {
     console.error('TMDB 상세 정보 가져오기 실패:', error)
@@ -950,7 +980,12 @@ async function saveContentToSupabase(
       }
     }
 
-    const contentTitle = movie.title || movie.name || '';
+    // [수정] 제목과 줄거리 - details에서 가져오거나 movie에서 fallback
+    const contentTitle = details?.title || movie.title || movie.name || '';
+    const contentTitleEn = details?.titleEn || null;
+    const contentDescription = details?.description || movie.overview || null;
+    const contentDescriptionEn = details?.descriptionEn || null;
+
     if (!contentTitle) {
       console.warn('제목이 없는 콘텐츠:', movie.id);
       return null;
@@ -961,7 +996,9 @@ async function saveContentToSupabase(
 
     const contentData = {
       title: contentTitle,
-      description: movie.overview || null,
+      title_en: contentTitleEn, // [추가] 영어 제목
+      description: contentDescription,
+      description_en: contentDescriptionEn, // [추가] 영어 줄거리
       poster_url: movie.poster_path
         ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
         : null,
@@ -970,7 +1007,7 @@ async function saveContentToSupabase(
       year: year,
       genre: contentGenre,
       tags: tagsKo,      // 한국어 태그
-      tags_en: tagsEn,   // 영어 태그 (추가)
+      tags_en: tagsEn,   // 영어 태그
       url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
       ott_providers: ottProviders && ottProviders.length > 0 ? ottProviders : undefined,
       vector: embedding, // 임베딩 벡터 추가 (null 가능)

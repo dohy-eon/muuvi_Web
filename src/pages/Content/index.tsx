@@ -750,7 +750,7 @@ export default function Content() {
           <>
             <img
               src={content.poster_url}
-              alt={content.title}
+              alt={(language === 'en' && content.title_en) ? content.title_en : content.title}
               className="absolute inset-0 w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black" />
@@ -761,7 +761,8 @@ export default function Content() {
         <div className="absolute inset-0 flex flex-col justify-end pb-4 px-5">
           {/* 제목 */}
           <h1 className="text-[20px] font-bold text-white mb-1 text-center">
-            {content.title}
+            {/* [수정] 언어에 따른 제목 선택 */}
+            {(language === 'en' && content.title_en) ? content.title_en : content.title}
           </h1>
           
           {/* 장르 • 연도 */}
@@ -814,7 +815,7 @@ export default function Content() {
             <div className="absolute right-[20px] bottom-[20px] w-[84px] h-[120px] rounded-[6px] overflow-hidden">
               <img
                 src={content.poster_url}
-                alt={`${content.title} poster`}
+                alt={`${(language === 'en' && content.title_en) ? content.title_en : content.title} poster`}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -823,10 +824,11 @@ export default function Content() {
       </div>
 
       {/* 줄거리 섹션 (검은 배경) */}
-      {content.description && (
+      {((language === 'en' && content.description_en) || content.description) && (
         <div className="w-full min-h-[105px] bg-[#010100] px-5 py-4">
           <p className="text-[14px] font-normal text-white leading-[1.5]">
-            {content.description}
+            {/* [수정] 언어에 따른 줄거리 선택 */}
+            {(language === 'en' && content.description_en) ? content.description_en : content.description}
           </p>
         </div>
       )}
@@ -838,7 +840,8 @@ export default function Content() {
           <div className="flex items-start">
             <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.originalTitle}</p>
             <p className="text-[14px] font-normal text-gray-900 flex-1">
-              {content.title || '-'}
+              {/* [수정] 원제는 언어에 따라 표시 (원제는 원래 언어의 제목이므로 반대로 표시) */}
+              {(language === 'en' ? content.title : (content.title_en || content.title)) || '-'}
             </p>
           </div>
           

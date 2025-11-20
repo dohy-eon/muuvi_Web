@@ -237,7 +237,8 @@ export default function RecommendationCard({ content, isActive = false, distance
                 WebkitBoxOrient: 'vertical',
               }}
             >
-              {content.title}
+              {/* [수정] 언어에 따른 제목 선택 */}
+              {(language === 'en' && content.title_en) ? content.title_en : content.title}
             </div>
 
             {/* OTT 제공자 로고들 - 하단 왼쪽 (최대 6개) */}
