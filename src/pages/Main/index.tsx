@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useRecoilValue, useSetRecoilState } from 'recoil'
-import { onboardingDataState } from '../../recoil/userState'
+import { onboardingDataState, languageState } from '../../recoil/userState'
 import { getProfile, saveProfile } from '../../lib/supabase/profile'
 import { getRecommendations } from '../../lib/supabase/recommendations'
 import { addNotInterested, getNotInterestedContentIds, removeNotInterested } from '../../lib/supabase/notInterested'
@@ -16,17 +16,52 @@ import Reload from '../../assets/reload.svg'
 import RecommendInactive from '../../assets/RecommendInactive.svg'
 import RecommendActive from '../../assets/RecommendActive.svg'
 
-// 무드 ID를 한글 이름으로 매핑
-const moodIdToKorean: Record<string, string> = {
-  '01': '로맨스',
-  '02': '호러',
-  '03': '코미디',
-  '04': '공상 과학',
-  '05': '판타지',
-  '06': '어드벤처',
-  '07': '액션',
-  '08': '힐링',
-  '09': '미스테리',
+// [추가] 언어별 무드 이름 매핑
+const MOOD_TABLE = {
+  ko: {
+    '01': '로맨스',
+    '02': '호러',
+    '03': '코미디',
+    '04': '공상 과학',
+    '05': '판타지',
+    '06': '어드벤처',
+    '07': '액션',
+    '08': '힐링',
+    '09': '미스테리',
+  },
+  en: {
+    '01': 'Romance',
+    '02': 'Horror',
+    '03': 'Comedy',
+    '04': 'Sci-Fi',
+    '05': 'Fantasy',
+    '06': 'Adventure',
+    '07': 'Action',
+    '08': 'Healing',
+    '09': 'Mystery',
+  },
+}
+
+// [추가] UI 텍스트 다국어 정의
+const UI_TEXT = {
+  ko: {
+    genre: '장르',
+    mood: '무드',
+    noContent: '추천 콘텐츠가 없습니다.',
+    loading: '로딩 중...',
+    restart: '다시하기',
+    notInterested: '관심없음',
+    notInterestedCancel: '관심없음 취소',
+  },
+  en: {
+    genre: 'Genre',
+    mood: 'Mood',
+    noContent: 'No recommendations available.',
+    loading: 'Loading...',
+    restart: 'Restart',
+    notInterested: 'Not Interested',
+    notInterestedCancel: 'Restore Interest',
+  },
 }
 
 export default function Main() {
@@ -34,6 +69,12 @@ export default function Main() {
   const location = useLocation()
   const setOnboardingData = useSetRecoilState(onboardingDataState)
   const user = useRecoilValue(userState)
+
+  // [추가] 언어 상태 가져오기
+  const language = useRecoilValue(languageState)
+  const t = UI_TEXT[language]
+  const moodMap = MOOD_TABLE[language]
+
   const [recommendations, setRecommendations] = useState<Content[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showLoadingScreen, setShowLoadingScreen] = useState(false) // 온보딩에서 넘어올 때만 true
@@ -179,9 +220,10 @@ export default function Main() {
   // 프로필이 있으면 프로필 사용, 없으면 온보딩 데이터 사용
   const displayGenre = profile?.genre || onboardingData?.genre
   const displayMoods = profile?.moods || onboardingData?.moods || []
-  
+
+  // [수정] 현재 언어에 맞는 무드 이름 표시
   const moodNames = displayMoods
-    .map((id) => moodIdToKorean[id] || id)
+    .map((id) => moodMap[id as keyof typeof moodMap] || id)
     .join(', ')
 
   // 다음/이전 핸들러
@@ -356,8 +398,9 @@ export default function Main() {
         <div className="w-80 py-4 left-1/2 -translate-x-1/2 top-[600px] absolute bg-gray-50 rounded-xl inline-flex flex-col justify-start items-center gap-4">
           {displayGenre && (
             <div className="w-72 inline-flex justify-between items-start">
-              <div className="w-6 justify-start text-gray-600 text-sm font-medium font-pretendard tracking-tight">
-                장르
+              {/* [수정] 장르 텍스트 변수 사용 */}
+              <div className="w-16 justify-start text-gray-600 text-sm font-medium font-pretendard tracking-tight">
+                {t.genre}
               </div>
               <div className="text-right justify-start text-gray-900 text-sm font-medium font-pretendard tracking-tight">
                 {displayGenre}
@@ -366,10 +409,11 @@ export default function Main() {
           )}
           {moodNames && (
             <div className="w-72 inline-flex justify-between items-center">
-              <div className="text-center justify-start text-gray-600 text-sm font-medium font-pretendard tracking-tight">
-                무드
+              {/* [수정] 무드 텍스트 변수 사용 */}
+              <div className="w-16 text-left justify-start text-gray-600 text-sm font-medium font-pretendard tracking-tight">
+                {t.mood}
               </div>
-              <div className="text-center justify-start text-gray-900 text-sm font-medium font-pretendard tracking-tight">
+              <div className="text-right justify-start text-gray-900 text-sm font-medium font-pretendard tracking-tight">
                 {moodNames}
               </div>
             </div>
@@ -381,13 +425,13 @@ export default function Main() {
 
       {/* Recommendation Cards -> Slider Container */}
       {isLoading ? (
-        // 로딩 중일 때는 아무것도 표시하지 않음 (또는 로딩 인디케이터)
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
-          {/* 로딩 중... */}
+          {/* [수정] 로딩 텍스트 */}
         </div>
       ) : recommendations.length === 0 ? (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-gray-600">
-          추천 콘텐츠가 없습니다.
+          {/* [수정] 결과 없음 텍스트 */}
+          {t.noContent}
         </div>
       ) : (
         // 카루셀 컨테이너 (반원 배치)
@@ -514,7 +558,8 @@ export default function Main() {
           onClick={handleRestart}
           className="px-4 py-2 bg-[#2e2c6a] text-white text-sm font-semibold rounded-lg hover:bg-[#3a3878] transition-colors whitespace-nowrap"
         >
-          다시하기
+          {/* [수정] 다시하기 텍스트 */}
+          {t.restart}
         </button>
 
         {/* Reload Button */}
@@ -542,7 +587,8 @@ export default function Main() {
           >
             <img
               src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
-              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? '관심없음 취소' : '관심없음'}
+              // [수정] 관심없음 텍스트
+              alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? t.notInterestedCancel : t.notInterested}
               className="w-[28px] h-[28px]"
             />
           </button>
