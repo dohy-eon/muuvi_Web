@@ -42,6 +42,14 @@ const MOOD_TABLE = {
   },
 }
 
+// [추가] 장르 번역 맵 (한국어 -> 영어)
+const GENRE_TRANSLATION: Record<string, { ko: string; en: string }> = {
+  '영화': { ko: '영화', en: 'Movie' },
+  '드라마': { ko: '드라마', en: 'Drama' },
+  '애니메이션': { ko: '애니메이션', en: 'Animation' },
+  '예능': { ko: '예능', en: 'Variety Show' },
+}
+
 // [추가] UI 텍스트 다국어 정의
 const UI_TEXT = {
   ko: {
@@ -218,8 +226,13 @@ export default function Main() {
   }
 
   // 프로필이 있으면 프로필 사용, 없으면 온보딩 데이터 사용
-  const displayGenre = profile?.genre || onboardingData?.genre
+  const genreValue = profile?.genre || onboardingData?.genre
   const displayMoods = profile?.moods || onboardingData?.moods || []
+
+  // [수정] 현재 언어에 맞는 장르 이름 표시
+  const displayGenre = genreValue
+    ? (GENRE_TRANSLATION[genreValue]?.[language] || genreValue)
+    : null
 
   // [수정] 현재 언어에 맞는 무드 이름 표시
   const moodNames = displayMoods
