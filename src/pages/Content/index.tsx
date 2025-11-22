@@ -6,7 +6,7 @@ import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content, OTTProvider } from '../../types'
 import BottomNavigation from '../../components/BottomNavigation'
 import SimpleLoading from '../../components/SimpleLoading'
-import html2canvas from 'html2canvas'
+import { toBlob } from 'html-to-image' // [변경] html-to-image에서 toBlob 가져오기
 import { saveAs } from 'file-saver'
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
@@ -637,58 +637,62 @@ export default function Content() {
     setSelectedFilter(prev => prev === filterType ? null : filterType)
   }, [])
 
-  // [추가] 공유 버튼 클릭 핸들러
+  // [추가] 공유 버튼 클릭 핸들러 (html-to-image 적용)
   const handleShareClick = async () => {
     if (!posterRef.current || !content || isSharing) return
 
     setIsSharing(true)
 
     try {
-      // 1. html2canvas를 사용하여 포스터 영역을 캔버스로 변환
-      const canvas = await html2canvas(posterRef.current, {
-        useCORS: true, // 외부 리소스 캡처를 위해 필수
-        scale: 2, // 고해상도 캡처
-        backgroundColor: null, // 배경 투명하게
-        logging: false,
+      // 0. 폰트 로딩 대기
+      await document.fonts.ready
+
+      // 1. html-to-image를 사용하여 포스터 영역을 이미지로 변환
+      const blob = await toBlob(posterRef.current, {
+        cacheBust: true, // 캐시 문제 방지 (CORS 이미지 로딩용)
+        pixelRatio: 4,   // 고해상도 설정
+        backgroundColor: '', // 투명 배경 유지
+        style: {
+          fontFamily: '"Pretendard", sans-serif', // 폰트 강제 적용
+        },
       })
 
-      // 2. 캔버스를 Blob 데이터로 변환
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          console.error('이미지 생성 실패')
-          setIsSharing(false)
-          return
-        }
-
-        const title = (language === 'en' && content.title_en) ? content.title_en : content.title
-        const fileName = `muuvi_${title.replace(/\s+/g, '_')}.png`
-        const file = new File([blob], fileName, { type: 'image/png' })
-
-        // 3. Web Share API 시도 (모바일 등 지원 환경)
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              title: title,
-              text: language === 'en' 
-                ? `Found this amazing content on Muuvi! "${title}"`
-                : `Muuvi에서 발견한 인생 영화! "${title}"`,
-              files: [file],
-            })
-            console.log('공유 성공')
-          } catch (shareError) {
-            // 사용자가 공유 취소한 경우 등 에러 처리
-            if ((shareError as Error).name !== 'AbortError') {
-              console.error('공유 실패:', shareError)
-              // 공유 실패 시 폴백으로 다운로드 시도
-              saveAs(blob, fileName)
-            }
-          }
-        } else {
-          // 4. Web Share API 미지원 시 폴백 (파일 다운로드 - 데스크탑 등)
-          saveAs(blob, fileName)
-        }
+      if (!blob) {
+        console.error('이미지 생성 실패')
         setIsSharing(false)
-      }, 'image/png')
+        return
+      }
+
+      // 2. 파일 저장 및 공유
+      const title = (language === 'en' && content.title_en) ? content.title_en : content.title
+      const safeTitle = title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_').replace(/\s+/g, '_')
+      const fileName = `muuvi_${safeTitle}.png`
+      const file = new File([blob], fileName, { type: 'image/png' })
+
+      // 3. Web Share API 시도 (모바일 등 지원 환경)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: title,
+            text: language === 'en' 
+              ? `Found this amazing content on Muuvi! "${title}"`
+              : `Muuvi에서 발견한 인생 영화! "${title}"`,
+            files: [file],
+          })
+          console.log('공유 성공')
+        } catch (shareError) {
+          // 사용자가 공유 취소한 경우 등 에러 처리
+          if ((shareError as Error).name !== 'AbortError') {
+            console.error('공유 실패:', shareError)
+            // 공유 실패 시 폴백으로 다운로드 시도
+            saveAs(blob, fileName)
+          }
+        }
+      } else {
+        // 4. Web Share API 미지원 시 폴백 (파일 다운로드 - 데스크탑 등)
+        saveAs(blob, fileName)
+      }
+      setIsSharing(false)
 
     } catch (error) {
       console.error('이미지 캡처 중 오류 발생:', error)

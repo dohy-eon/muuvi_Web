@@ -6,7 +6,7 @@ import { userState, languageState } from '../recoil/userState'
 import { addFavorite, removeFavorite, isFavorite } from '../lib/supabase/favorites'
 import LikeIcon from '../pages/MyPage/like.svg'
 import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
-import html2canvas from 'html2canvas'
+import { toBlob } from 'html-to-image' // [변경] html-to-image에서 toBlob 가져오기
 import { saveAs } from 'file-saver'
 
 interface RecommendationCardProps {
@@ -167,168 +167,231 @@ export default function RecommendationCard({ content, isActive = false, distance
     }
   }
 
-  // [추가] 공유 버튼 클릭 핸들러 (고해상도 캡처 및 폰트 최적화)
+  // [수정] 공유 버튼 클릭 핸들러 (텍스트 위치 보정 강화)
   const handleShareClick = async (e: React.MouseEvent) => {
-    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
+    e.stopPropagation()
     if (!cardRef.current || !content || isSharing) return
 
     setIsSharing(true)
 
     try {
-      // 0. 폰트가 모두 로드될 때까지 기다립니다 (폰트 깨짐 방지 핵심)
+      // 0. 폰트 로딩 대기
       await document.fonts.ready
 
-      // 1. 현재 카드를 복제(Clone)합니다.
+      // 1. 원본 요소 및 크기 측정
       const originalElement = cardRef.current
-      
-      // 2. 원본 카드의 실제 크기를 측정합니다
       const originalRect = originalElement.getBoundingClientRect()
       const originalWidth = originalRect.width
       const originalHeight = originalRect.height
-      
-      const clone = originalElement.cloneNode(true) as HTMLElement
 
-      // 3. 복제본에 data 속성 추가 (onclone에서 찾기 위해)
+      // [핵심] 원본 타이틀의 '계산된' 스타일 가져오기
+      const originalTitle = originalElement.querySelector('[data-title]')
+      let computedTitleStyle: CSSStyleDeclaration | null = null
+      if (originalTitle) {
+        computedTitleStyle = window.getComputedStyle(originalTitle)
+      }
+
+      // 2. 복제
+      const clone = originalElement.cloneNode(true) as HTMLElement
       clone.setAttribute('data-card-container', 'true')
 
-      // 4. 복제된 카드의 스타일을 '고화질 증명사진'처럼 초기화합니다.
-      // 원본과 동일한 크기로 설정
+      // 3. 복제본 기본 스타일 초기화 ('증명사진' 모드)
       Object.assign(clone.style, {
         position: 'fixed',
         top: '0px',
         left: '0px',
-        zIndex: '-9999',
-        transform: 'none', // 회전/스케일 제거
-        filter: 'none',    // 블러 제거
+        zIndex: '-9999', // 화면 뒤로 숨김
+        transform: 'none',
+        filter: 'none',
         opacity: '1',
-        width: `${originalWidth}px`, // 원본 크기 사용
-        height: `${originalHeight}px`, // 원본 크기 사용
-        minWidth: `${originalWidth}px`,
-        minHeight: `${originalHeight}px`,
-        maxWidth: `${originalWidth}px`,
-        maxHeight: `${originalHeight}px`,
+        width: `${originalWidth}px`,
+        height: `${originalHeight}px`,
         borderRadius: '20px',
         margin: '0',
         padding: '0',
         transition: 'none',
-        overflow: 'hidden', // overflow 유지
-        // [추가] 텍스트 렌더링 품질 향상 옵션
+        backgroundColor: 'transparent', // 투명 배경
+        // 텍스트 렌더링 옵션
         fontSmooth: 'antialiased',
-        WebkitFontSmoothing: 'antialiased',
-        MozOsxFontSmoothing: 'grayscale',
-        textRendering: 'optimizeLegibility',
+        webkitFontSmoothing: 'antialiased',
+        mozOsxFontSmoothing: 'grayscale',
       })
 
-      // 5. 복제본을 body에 추가 (먼저 추가해야 getBoundingClientRect() 작동)
+      // 4. DOM 추가
       document.body.appendChild(clone)
 
-      // 6. 복제본 내부 요소들의 위치를 원본과 정확히 맞추기
-      // 모든 absolute/fixed 요소들의 위치를 상대 좌표로 계산하여 복사
+      // ==================================================================
+      // [수정 포인트 1] 태그 텍스트 정렬 방식 변경 (Flex -> Line-height)
+      // Flexbox 정렬은 캡처 시 오차가 크므로, 줄 높이를 강제하여 맞춥니다.
+      // ==================================================================
+      const cloneTags = clone.querySelectorAll('[data-tag-text]')
+      const originalTags = originalElement.querySelectorAll('[data-tag-text]')
+      
+      cloneTags.forEach((tag, index) => {
+        const el = tag as HTMLElement
+        const parent = el.parentElement as HTMLElement
+        const originalTag = originalTags[index] as HTMLElement
+        
+        if (parent && originalTag) {
+          const originalParent = originalTag.parentElement as HTMLElement
+          
+          if (originalParent) {
+            // 원본 부모의 스타일을 정확히 복사
+            const originalParentStyle = window.getComputedStyle(originalParent)
+            
+            // 부모 컨테이너 스타일 복사 (배경색, 패딩, 크기 등)
+            parent.style.display = originalParentStyle.display || 'flex'
+            parent.style.alignItems = 'center'
+            parent.style.justifyContent = 'center'
+            parent.style.height = originalParentStyle.height || '20px'
+            parent.style.width = originalParentStyle.width || 'auto'
+            parent.style.padding = originalParentStyle.padding || '8px 8px'
+            parent.style.margin = originalParentStyle.margin || '0'
+            parent.style.borderRadius = originalParentStyle.borderRadius || '6px'
+            parent.style.overflow = originalParentStyle.overflow || 'hidden'
+            parent.style.backgroundColor = originalParentStyle.backgroundColor || ''
+            // 폰트 렌더링 보정
+            parent.style.fontFamily = '"Pretendard", sans-serif'
+          } else {
+            // fallback
+            parent.style.display = 'flex'
+            parent.style.alignItems = 'center'
+            parent.style.justifyContent = 'center'
+            parent.style.height = '20px'
+            parent.style.padding = '8px'
+          }
+        }
+
+        // 텍스트 스타일: 원본 텍스트의 스타일을 정확히 복사
+        if (originalTag) {
+          const originalTagStyle = window.getComputedStyle(originalTag)
+          
+          el.style.height = 'auto'
+          el.style.lineHeight = originalTagStyle.lineHeight || '1'
+          el.style.display = originalTagStyle.display || 'block'
+          el.style.textAlign = originalTagStyle.textAlign || 'center'
+          el.style.margin = originalTagStyle.margin || '0'
+          el.style.padding = originalTagStyle.padding || '0'
+          el.style.transform = 'none'
+          el.style.fontFamily = originalTagStyle.fontFamily || '"Pretendard", sans-serif'
+          el.style.fontSize = originalTagStyle.fontSize || '10px'
+          el.style.fontWeight = originalTagStyle.fontWeight || 'normal'
+          el.style.color = originalTagStyle.color || 'white'
+          el.style.whiteSpace = originalTagStyle.whiteSpace || 'nowrap'
+        } else {
+          // fallback
+          el.style.height = 'auto'
+          el.style.lineHeight = '1'
+          el.style.display = 'flex'
+          el.style.alignItems = 'center'
+          el.style.justifyContent = 'center'
+          el.style.margin = '0'
+          el.style.padding = '0'
+          el.style.transform = 'none'
+          el.style.fontFamily = '"Pretendard", sans-serif'
+          el.style.fontSize = '10px'
+        }
+      })
+
+      // ==================================================================
+      // [수정 포인트 2] 타이틀 위치 및 줄바꿈 강제 고정
+      // ==================================================================
+      const cloneTitle = clone.querySelector('[data-title]') as HTMLElement
+      if (cloneTitle && computedTitleStyle) {
+        // 1. 폰트 크기와 줄 높이를 px 단위로 고정
+        cloneTitle.style.fontSize = computedTitleStyle.fontSize
+        cloneTitle.style.lineHeight = computedTitleStyle.lineHeight
+        
+        // 2. 위치 보정: relative로 변경하여 top 값을 미세 조정
+        cloneTitle.style.position = 'relative'
+        cloneTitle.style.top = '-2px' // html-to-image는 오차가 적어 조정값 줄임
+        cloneTitle.style.marginTop = '0'
+        cloneTitle.style.marginBottom = '0'
+        
+        // 3. 너비 고정 (줄바꿈이 원본과 달라지는 것 방지)
+        cloneTitle.style.width = computedTitleStyle.width
+        cloneTitle.style.whiteSpace = 'normal' // 줄바꿈 허용
+        cloneTitle.style.fontFamily = '"Pretendard", sans-serif'
+      }
+
+      // (3) Absolute 요소 위치 동기화 (기존 유지)
       const originalElements = originalElement.querySelectorAll('*')
       const cloneElements = clone.querySelectorAll('*')
-      
       originalElements.forEach((originalEl, index) => {
         const cloneEl = cloneElements[index] as HTMLElement
         if (!cloneEl) return
-        
-        const originalElRect = originalEl.getBoundingClientRect()
-        const originalParentRect = (originalEl.parentElement || originalElement).getBoundingClientRect()
         const computedStyle = window.getComputedStyle(originalEl)
-        
-        // absolute 또는 fixed 위치인 요소들의 위치 복사
-        if (computedStyle.position === 'absolute' || computedStyle.position === 'fixed') {
-          // 원본 요소의 상대 위치 계산
-          const top = originalElRect.top - originalParentRect.top
-          const left = originalElRect.left - originalParentRect.left
-          
-          // 복제본 요소에 위치 적용
-          cloneEl.style.position = 'absolute'
-          cloneEl.style.top = `${top}px`
-          cloneEl.style.left = `${left}px`
-          cloneEl.style.width = `${originalElRect.width}px`
-          cloneEl.style.height = `${originalElRect.height}px`
+        if (computedStyle.position === 'absolute') {
+          const oRect = originalEl.getBoundingClientRect()
+          const pRect = (originalEl.parentElement || originalElement).getBoundingClientRect()
+          cloneEl.style.top = `${oRect.top - pRect.top}px`
+          cloneEl.style.left = `${oRect.left - pRect.left}px`
         }
       })
 
-      // 7. 약간의 지연을 주어 스타일 적용이 완료되도록 대기
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // 5. 렌더링 안정화를 위한 지연 시간 증가
+      await new Promise(resolve => setTimeout(resolve, 300))
 
-      // 8. html2canvas 옵션 최적화 (원본 크기 사용)
-      const canvas = await html2canvas(clone, {
-        useCORS: true, // 외부 리소스 캡처를 위해 필수
-        scale: 4, // [중요] 해상도를 2에서 4로 높임 (텍스트 선명도 향상)
-        backgroundColor: null, // 배경 투명하게
-        logging: false,
-        width: originalWidth, // 원본 너비 사용
-        height: originalHeight, // 원본 높이 사용
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        // [추가] 폰트 렌더링 보정
-        onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.body.querySelector('[data-card-container]') as HTMLElement
-          if (clonedElement) {
-            // 혹시 모를 폰트 로딩 문제 방지를 위해 폰트 패밀리 강제 재지정
-            clonedElement.style.fontFamily = 'Pretendard, -apple-system, BlinkMacSystemFont, sans-serif'
-            
-            // 모든 텍스트 요소에 폰트 재적용
-            const allTextElements = clonedElement.querySelectorAll('*')
-            allTextElements.forEach((el) => {
-              const htmlEl = el as HTMLElement
-              if (htmlEl.textContent && htmlEl.textContent.trim().length > 0) {
-                htmlEl.style.fontFamily = 'Pretendard, -apple-system, BlinkMacSystemFont, sans-serif'
-              }
-            })
-          }
+      // 6. 이미지 생성 (html-to-image 사용)
+      // toBlob을 사용하여 바로 Blob 데이터를 얻습니다.
+      const blob = await toBlob(clone, {
+        cacheBust: true, // 캐시 문제 방지 (CORS 이미지 로딩용)
+        pixelRatio: 4,   // 고해상도 설정 (html2canvas의 scale과 유사)
+        backgroundColor: '', // 투명 배경 유지
+        width: originalWidth,
+        height: originalHeight,
+        style: {
+          fontFamily: '"Pretendard", sans-serif', // 폰트 강제 적용
         },
       })
 
-      // 9. 복제본 제거
+      // 7. 복제본 제거
       document.body.removeChild(clone)
 
-      // 10. 캔버스를 Blob 데이터로 변환
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          console.error('이미지 생성 실패')
-          setIsSharing(false)
-          return
-        }
-
-        const title = (language === 'en' && content.title_en) ? content.title_en : content.title
-        const safeTitle = title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_').replace(/\s+/g, '_')
-        const fileName = `muuvi_${safeTitle}.png`
-        const file = new File([blob], fileName, { type: 'image/png' })
-
-        // 8. Web Share API 시도 (모바일 등 지원 환경)
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              title: title,
-              text: language === 'en' 
-                ? `Found this amazing content on Muuvi! "${title}"`
-                : `Muuvi에서 발견한 인생 영화! "${title}"`,
-              files: [file],
-            })
-            console.log('공유 성공')
-          } catch (shareError) {
-            // 사용자가 공유 취소한 경우 등 에러 처리
-            if ((shareError as Error).name !== 'AbortError') {
-              console.error('공유 실패:', shareError)
-              // 공유 실패 시 폴백으로 다운로드 시도
-              saveAs(blob, fileName)
-            }
-          }
-        } else {
-          // 9. Web Share API 미지원 시 폴백 (파일 다운로드 - 데스크탑 등)
-          saveAs(blob, fileName)
-        }
+      if (!blob) {
+        console.error('이미지 생성 실패')
         setIsSharing(false)
-      }, 'image/png', 1.0) // [추가] 이미지 품질 1.0 (최대) 설정
+        return
+      }
+
+      // 8. 파일 저장 및 공유
+      const title = (language === 'en' && content.title_en) ? content.title_en : content.title
+      const safeTitle = title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_').replace(/\s+/g, '_')
+      const fileName = `muuvi_${safeTitle}.png`
+      const file = new File([blob], fileName, { type: 'image/png' })
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: title,
+            text: language === 'en' ? `Check this out on Muuvi: "${title}"` : `Muuvi 추천: "${title}"`,
+          })
+        } catch (shareError) {
+          if ((shareError as Error).name !== 'AbortError') {
+            saveAs(blob, fileName)
+          }
+        }
+      } else {
+        saveAs(blob, fileName)
+      }
+      setIsSharing(false)
 
     } catch (error) {
-      console.error('이미지 캡처 중 오류 발생:', error)
+      console.error('Capture error:', error)
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        })
+      }
       setIsSharing(false)
+      // 복제본이 남아있을 경우 제거
+      const existingClone = document.querySelector('[data-card-container]')
+      if (existingClone && existingClone.parentElement) {
+        existingClone.parentElement.removeChild(existingClone)
+      }
     }
   }
 
@@ -367,7 +430,11 @@ export default function RecommendationCard({ content, isActive = false, distance
                 key={tagIndex}
                 className={`px-2 h-5 ${tagColor} rounded-[6px] overflow-hidden flex items-center justify-center flex-shrink-0`}
               >
-                <div className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap">
+                {/* [수정] data-tag-text 속성 추가 */}
+                <div 
+                  data-tag-text
+                  className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap"
+                >
                   {tag}
                 </div>
               </div>
@@ -423,11 +490,12 @@ export default function RecommendationCard({ content, isActive = false, distance
               {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || content.genres?.[0] || (language === 'en' ? 'Movie' : '영화'))} •{content.year || ''}
             </div>
 
-            {/* 제목 - 반응형 폰트 크기, 길면 줄바꿈 */}
+            {/* [수정] 제목 영역: data-title 속성 추가 */}
             <div 
+              data-title
               className="text-white font-light font-pretendard leading-tight break-words"
               style={{ 
-                fontSize: 'clamp(20px, 5.5vw, 28px)',
+                fontSize: 'clamp(20px, 5.5vw, 28px)', // 이 clamp 값이 캡처 시 문제를 일으킴 -> 위 로직에서 px로 고정
                 wordBreak: 'keep-all',
                 overflowWrap: 'break-word',
                 lineHeight: '1.2',
