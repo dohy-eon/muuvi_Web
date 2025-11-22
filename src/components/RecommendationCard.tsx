@@ -14,6 +14,8 @@ interface RecommendationCardProps {
   isActive?: boolean // 현재 활성화된 카드인지 여부
   distance?: number // 현재 카드로부터의 거리 (0 = 현재 카드)
   onCardClick?: (e: React.MouseEvent) => void // 부모에서 클릭 처리
+  onShareSuccess?: () => void // 공유 성공 콜백
+  onShareError?: () => void // 공유 실패 콜백
 }
 
 // [추가] 공유 아이콘 컴포넌트 (SVG)
@@ -78,7 +80,7 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
-export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick }: RecommendationCardProps) {
+export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick, onShareSuccess, onShareError }: RecommendationCardProps) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
   const language = useRecoilValue(languageState) // [추가] 언어 상태 가져오기
@@ -94,7 +96,7 @@ export default function RecommendationCard({ content, isActive = false, distance
   const sourceTags = (language === 'en' && content.tags_en && content.tags_en.length > 0)
     ? content.tags_en
     : content.tags
-
+  
   // 실제 장르 태그 사용 (최대 2개)
   // & 기호로 연결된 복합 태그는 분리 (예: "Action & Adventure" → "Action", "Adventure")
   const genreTags = sourceTags && sourceTags.length > 0 
@@ -351,6 +353,7 @@ export default function RecommendationCard({ content, isActive = false, distance
       if (!blob) {
         console.error('이미지 생성 실패')
         setIsSharing(false)
+        onShareError?.()
         return
       }
 
@@ -375,7 +378,9 @@ export default function RecommendationCard({ content, isActive = false, distance
       } else {
         saveAs(blob, fileName)
       }
+      
       setIsSharing(false)
+      onShareSuccess?.()
 
     } catch (error) {
       console.error('Capture error:', error)
@@ -386,7 +391,9 @@ export default function RecommendationCard({ content, isActive = false, distance
           name: error.name,
         })
       }
+      
       setIsSharing(false)
+      onShareError?.()
       // 복제본이 남아있을 경우 제거
       const existingClone = document.querySelector('[data-card-container]')
       if (existingClone && existingClone.parentElement) {
@@ -403,16 +410,16 @@ export default function RecommendationCard({ content, isActive = false, distance
 
   return (
     <div
-      ref={cardRef}
-      data-card-container="true"
-      className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
-      style={{
-        opacity,
-        transform: `scale(${scale})`,
-        filter: `blur(${blurAmount}px)`,
-      }}
-      onClick={handleClick}
-    >
+        ref={cardRef}
+        data-card-container="true"
+        className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
+        style={{
+          opacity,
+          transform: `scale(${scale})`,
+          filter: `blur(${blurAmount}px)`,
+        }}
+        onClick={handleClick}
+      >
       {/* 배경 이미지 전체 + 그라데이션 오버레이 */}
       {content.poster_url ? (
         <img src={content.poster_url} alt={content.title} className="absolute inset-0 w-full h-full object-cover" />

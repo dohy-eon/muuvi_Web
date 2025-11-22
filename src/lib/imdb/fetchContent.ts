@@ -442,11 +442,11 @@ async function getContentDetailsFromTMDB(
     // 한국어와 영어 정보를 병렬로 가져오기
     const [responseKo, responseEn] = await Promise.all([
       fetch(
-        `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
+      `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits,videos,keywords&language=ko-KR`
       ),
       fetch(
         `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&language=en-US`
-      )
+    )
     ])
 
     if (!responseKo.ok) return null

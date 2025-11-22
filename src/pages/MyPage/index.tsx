@@ -68,11 +68,11 @@ function LoginPrompt() {
     try {
       setIsLoading(true)
       setErrorMessage(null)
-
+      
       const redirectTo = `${window.location.origin}/mypage`
-
+      
       console.log('[Google 로그인 시도]', { redirectTo })
-
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -82,13 +82,13 @@ function LoginPrompt() {
 
       if (error) {
         console.error('[Google 로그인 실패]', error)
-
+        
         const errorMsg = error.message || ''
-        const isProviderNotEnabled =
+        const isProviderNotEnabled = 
           errorMsg.includes('provider is not enabled') ||
           errorMsg.includes('Unsupported provider') ||
           error.status === 400
-
+        
         if (isProviderNotEnabled) {
           setErrorMessage(`${t.providerError}\n${t.providerGuide}`)
         } else {

@@ -132,6 +132,10 @@ export default function Main() {
   const [showNotInterestedToast, setShowNotInterestedToast] = useState(false)
   // 토스트 메시지 타입 ('notInterested': 관심없음, 'restored': 관심없음 취소)
   const [toastMessage, setToastMessage] = useState<'notInterested' | 'restored'>('notInterested')
+  // 공유 토스트 표시 상태
+  const [showShareToast, setShowShareToast] = useState(false)
+  // 공유 토스트 메시지 타입 ('imageSaved': 이미지 저장 성공, 'shareFailed': 공유 실패)
+  const [shareToastMessage, setShareToastMessage] = useState<'imageSaved' | 'shareFailed'>('imageSaved')
   // 관심없음으로 표시된 콘텐츠 ID 목록
   const [notInterestedIds, setNotInterestedIds] = useState<Set<string>>(new Set())
   // 스와이프 제스처를 위한 터치 상태
@@ -530,10 +534,30 @@ export default function Main() {
     }, 3000)
   }
 
+  // 공유 성공 핸들러
+  const handleShareSuccess = () => {
+    setShareToastMessage('imageSaved')
+    setShowShareToast(true)
+    setTimeout(() => {
+      setShowShareToast(false)
+    }, 3000)
+  }
+
+  // 공유 실패 핸들러
+  const handleShareError = () => {
+    setShareToastMessage('shareFailed')
+    setShowShareToast(true)
+    setTimeout(() => {
+      setShowShareToast(false)
+    }, 3000)
+  }
+
   return (
     <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden overflow-x-hidden">
       {/* 관심없음 토스트 */}
       <NotInterestedToast isVisible={showNotInterestedToast} message={toastMessage} />
+      {/* 공유 토스트 */}
+      <NotInterestedToast isVisible={showShareToast} message={shareToastMessage} />
       
       {/* 스크롤 가능한 콘텐츠 영역 */}
       <div 
@@ -720,6 +744,8 @@ export default function Main() {
                     isActive={index === currentIndex}
                     distance={distance}
                     onCardClick={handleCardClick}
+                    onShareSuccess={handleShareSuccess}
+                    onShareError={handleShareError}
                   />
                 </div>
               )

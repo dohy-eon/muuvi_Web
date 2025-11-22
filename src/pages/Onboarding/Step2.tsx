@@ -184,7 +184,7 @@ export default function OnboardingStep2() {
 
       // [추가] 온보딩 완료 후 이전 추천 데이터 초기화 (새로운 선택으로 인한 추천 업데이트를 위해)
       sessionStorage.removeItem('mainRecommendations')
-      
+
       // 메인 페이지로 이동하기 전에 이전 경로 저장
       sessionStorage.setItem('prevPath', '/onboarding/step2')
       navigate('/main')
