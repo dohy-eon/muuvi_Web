@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRecoilValue } from 'recoil'
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
@@ -6,13 +6,24 @@ import { userState, languageState } from '../recoil/userState'
 import { addFavorite, removeFavorite, isFavorite } from '../lib/supabase/favorites'
 import LikeIcon from '../pages/MyPage/like.svg'
 import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
+import { toBlob } from 'html-to-image' // [변경] html-to-image에서 toBlob 가져오기
+import { saveAs } from 'file-saver'
 
 interface RecommendationCardProps {
   content: Content
   isActive?: boolean // 현재 활성화된 카드인지 여부
   distance?: number // 현재 카드로부터의 거리 (0 = 현재 카드)
   onCardClick?: (e: React.MouseEvent) => void // 부모에서 클릭 처리
+  onShareSuccess?: () => void // 공유 성공 콜백
+  onShareError?: () => void // 공유 실패 콜백
 }
+
+// [추가] 공유 아이콘 컴포넌트 (SVG)
+const ShareIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+  </svg>
+)
 
 // 장르/태그 색상 매핑 (한국어 및 영어 키 지원)
 const genreTagColors: Record<string, string> = {
@@ -69,18 +80,23 @@ const genreTagColors: Record<string, string> = {
   'default': 'bg-[#9b59b6]',
 }
 
-export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick }: RecommendationCardProps) {
+export default function RecommendationCard({ content, isActive = false, distance = 0, onCardClick, onShareSuccess, onShareError }: RecommendationCardProps) {
   const navigate = useNavigate()
   const user = useRecoilValue(userState)
   const language = useRecoilValue(languageState) // [추가] 언어 상태 가져오기
   const [isLiked, setIsLiked] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
+  // [추가] 카드를 캡처하기 위한 ref 선언
+  const cardRef = useRef<HTMLDivElement>(null)
+  // [추가] 공유 진행 중 상태
+  const [isSharing, setIsSharing] = useState(false)
+  
   // [수정] 언어에 따른 태그 선택
   const sourceTags = (language === 'en' && content.tags_en && content.tags_en.length > 0)
     ? content.tags_en
     : content.tags
-
+  
   // 실제 장르 태그 사용 (최대 2개)
   // & 기호로 연결된 복합 태그는 분리 (예: "Action & Adventure" → "Action", "Adventure")
   const genreTags = sourceTags && sourceTags.length > 0 
@@ -153,6 +169,239 @@ export default function RecommendationCard({ content, isActive = false, distance
     }
   }
 
+  // [수정] 공유 버튼 클릭 핸들러 (텍스트 위치 보정 강화)
+  const handleShareClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!cardRef.current || !content || isSharing) return
+
+    setIsSharing(true)
+
+    try {
+      // 0. 폰트 로딩 대기
+      await document.fonts.ready
+
+      // 1. 원본 요소 및 크기 측정
+      const originalElement = cardRef.current
+      const originalRect = originalElement.getBoundingClientRect()
+      const originalWidth = originalRect.width
+      const originalHeight = originalRect.height
+
+      // [핵심] 원본 타이틀의 '계산된' 스타일 가져오기
+      const originalTitle = originalElement.querySelector('[data-title]')
+      let computedTitleStyle: CSSStyleDeclaration | null = null
+      if (originalTitle) {
+        computedTitleStyle = window.getComputedStyle(originalTitle)
+      }
+
+      // 2. 복제
+      const clone = originalElement.cloneNode(true) as HTMLElement
+      clone.setAttribute('data-card-container', 'true')
+
+      // 3. 복제본 기본 스타일 초기화 ('증명사진' 모드)
+      Object.assign(clone.style, {
+        position: 'fixed',
+        top: '0px',
+        left: '0px',
+        zIndex: '-9999', // 화면 뒤로 숨김
+        transform: 'none',
+        filter: 'none',
+        opacity: '1',
+        width: `${originalWidth}px`,
+        height: `${originalHeight}px`,
+        borderRadius: '20px',
+        margin: '0',
+        padding: '0',
+        transition: 'none',
+        backgroundColor: 'transparent', // 투명 배경
+        // 텍스트 렌더링 옵션
+        fontSmooth: 'antialiased',
+        webkitFontSmoothing: 'antialiased',
+        mozOsxFontSmoothing: 'grayscale',
+      })
+
+      // 4. DOM 추가
+      document.body.appendChild(clone)
+
+      // ==================================================================
+      // [수정 포인트 1] 태그 텍스트 정렬 방식 변경 (Flex -> Line-height)
+      // Flexbox 정렬은 캡처 시 오차가 크므로, 줄 높이를 강제하여 맞춥니다.
+      // ==================================================================
+      const cloneTags = clone.querySelectorAll('[data-tag-text]')
+      const originalTags = originalElement.querySelectorAll('[data-tag-text]')
+      
+      cloneTags.forEach((tag, index) => {
+        const el = tag as HTMLElement
+        const parent = el.parentElement as HTMLElement
+        const originalTag = originalTags[index] as HTMLElement
+        
+        if (parent && originalTag) {
+          const originalParent = originalTag.parentElement as HTMLElement
+          
+          if (originalParent) {
+            // 원본 부모의 스타일을 정확히 복사
+            const originalParentStyle = window.getComputedStyle(originalParent)
+            
+            // 부모 컨테이너 스타일 복사 (배경색, 패딩, 크기 등)
+            parent.style.display = originalParentStyle.display || 'flex'
+            parent.style.alignItems = 'center'
+            parent.style.justifyContent = 'center'
+            parent.style.height = originalParentStyle.height || '20px'
+            parent.style.width = originalParentStyle.width || 'auto'
+            parent.style.padding = originalParentStyle.padding || '8px 8px'
+            parent.style.margin = originalParentStyle.margin || '0'
+            parent.style.borderRadius = originalParentStyle.borderRadius || '6px'
+            parent.style.overflow = originalParentStyle.overflow || 'hidden'
+            parent.style.backgroundColor = originalParentStyle.backgroundColor || ''
+            // 폰트 렌더링 보정
+            parent.style.fontFamily = '"Pretendard", sans-serif'
+          } else {
+            // fallback
+            parent.style.display = 'flex'
+            parent.style.alignItems = 'center'
+            parent.style.justifyContent = 'center'
+            parent.style.height = '20px'
+            parent.style.padding = '8px'
+          }
+        }
+
+        // 텍스트 스타일: 원본 텍스트의 스타일을 정확히 복사
+        if (originalTag) {
+          const originalTagStyle = window.getComputedStyle(originalTag)
+          
+          el.style.height = 'auto'
+          el.style.lineHeight = originalTagStyle.lineHeight || '1'
+          el.style.display = originalTagStyle.display || 'block'
+          el.style.textAlign = originalTagStyle.textAlign || 'center'
+          el.style.margin = originalTagStyle.margin || '0'
+          el.style.padding = originalTagStyle.padding || '0'
+          el.style.transform = 'none'
+          el.style.fontFamily = originalTagStyle.fontFamily || '"Pretendard", sans-serif'
+          el.style.fontSize = originalTagStyle.fontSize || '10px'
+          el.style.fontWeight = originalTagStyle.fontWeight || 'normal'
+          el.style.color = originalTagStyle.color || 'white'
+          el.style.whiteSpace = originalTagStyle.whiteSpace || 'nowrap'
+        } else {
+          // fallback
+          el.style.height = 'auto'
+          el.style.lineHeight = '1'
+          el.style.display = 'flex'
+          el.style.alignItems = 'center'
+          el.style.justifyContent = 'center'
+          el.style.margin = '0'
+          el.style.padding = '0'
+          el.style.transform = 'none'
+          el.style.fontFamily = '"Pretendard", sans-serif'
+          el.style.fontSize = '10px'
+        }
+      })
+
+      // ==================================================================
+      // [수정 포인트 2] 타이틀 위치 및 줄바꿈 강제 고정
+      // ==================================================================
+      const cloneTitle = clone.querySelector('[data-title]') as HTMLElement
+      if (cloneTitle && computedTitleStyle) {
+        // 1. 폰트 크기와 줄 높이를 px 단위로 고정
+        cloneTitle.style.fontSize = computedTitleStyle.fontSize
+        cloneTitle.style.lineHeight = computedTitleStyle.lineHeight
+        
+        // 2. 위치 보정: relative로 변경하여 top 값을 미세 조정
+        cloneTitle.style.position = 'relative'
+        cloneTitle.style.top = '-2px' // html-to-image는 오차가 적어 조정값 줄임
+        cloneTitle.style.marginTop = '0'
+        cloneTitle.style.marginBottom = '0'
+        
+        // 3. 너비 고정 (줄바꿈이 원본과 달라지는 것 방지)
+        cloneTitle.style.width = computedTitleStyle.width
+        cloneTitle.style.whiteSpace = 'normal' // 줄바꿈 허용
+        cloneTitle.style.fontFamily = '"Pretendard", sans-serif'
+      }
+
+      // (3) Absolute 요소 위치 동기화 (기존 유지)
+      const originalElements = originalElement.querySelectorAll('*')
+      const cloneElements = clone.querySelectorAll('*')
+      originalElements.forEach((originalEl, index) => {
+        const cloneEl = cloneElements[index] as HTMLElement
+        if (!cloneEl) return
+        const computedStyle = window.getComputedStyle(originalEl)
+        if (computedStyle.position === 'absolute') {
+          const oRect = originalEl.getBoundingClientRect()
+          const pRect = (originalEl.parentElement || originalElement).getBoundingClientRect()
+          cloneEl.style.top = `${oRect.top - pRect.top}px`
+          cloneEl.style.left = `${oRect.left - pRect.left}px`
+        }
+      })
+
+      // 5. 렌더링 안정화를 위한 지연 시간 증가
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // 6. 이미지 생성 (html-to-image 사용)
+      // toBlob을 사용하여 바로 Blob 데이터를 얻습니다.
+      const blob = await toBlob(clone, {
+        cacheBust: true, // 캐시 문제 방지 (CORS 이미지 로딩용)
+        pixelRatio: 4,   // 고해상도 설정 (html2canvas의 scale과 유사)
+        backgroundColor: '', // 투명 배경 유지
+        width: originalWidth,
+        height: originalHeight,
+        style: {
+          fontFamily: '"Pretendard", sans-serif', // 폰트 강제 적용
+        },
+      })
+
+      // 7. 복제본 제거
+      document.body.removeChild(clone)
+
+      if (!blob) {
+        console.error('이미지 생성 실패')
+        setIsSharing(false)
+        onShareError?.()
+        return
+      }
+
+      // 8. 파일 저장 및 공유
+      const title = (language === 'en' && content.title_en) ? content.title_en : content.title
+      const safeTitle = title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_').replace(/\s+/g, '_')
+      const fileName = `muuvi_${safeTitle}.png`
+      const file = new File([blob], fileName, { type: 'image/png' })
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: title,
+            text: language === 'en' ? `Check this out on Muuvi: "${title}"` : `Muuvi 추천: "${title}"`,
+          })
+        } catch (shareError) {
+          if ((shareError as Error).name !== 'AbortError') {
+            saveAs(blob, fileName)
+          }
+        }
+      } else {
+        saveAs(blob, fileName)
+      }
+      
+      setIsSharing(false)
+      onShareSuccess?.()
+
+    } catch (error) {
+      console.error('Capture error:', error)
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        })
+      }
+      
+      setIsSharing(false)
+      onShareError?.()
+      // 복제본이 남아있을 경우 제거
+      const existingClone = document.querySelector('[data-card-container]')
+      if (existingClone && existingClone.parentElement) {
+        existingClone.parentElement.removeChild(existingClone)
+      }
+    }
+  }
+
 
   // 거리에 따른 블러 및 투명도 계산
   const blurAmount = Math.abs(distance) === 0 ? 0 : Math.abs(distance) === 1 ? 8 : 12
@@ -161,14 +410,16 @@ export default function RecommendationCard({ content, isActive = false, distance
 
   return (
     <div
-      className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
-      style={{
-        opacity,
-        transform: `scale(${scale})`,
-        filter: `blur(${blurAmount}px)`,
-      }}
-      onClick={handleClick}
-    >
+        ref={cardRef}
+        data-card-container="true"
+        className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
+        style={{
+          opacity,
+          transform: `scale(${scale})`,
+          filter: `blur(${blurAmount}px)`,
+        }}
+        onClick={handleClick}
+      >
       {/* 배경 이미지 전체 + 그라데이션 오버레이 */}
       {content.poster_url ? (
         <img src={content.poster_url} alt={content.title} className="absolute inset-0 w-full h-full object-cover" />
@@ -186,7 +437,11 @@ export default function RecommendationCard({ content, isActive = false, distance
                 key={tagIndex}
                 className={`px-2 h-5 ${tagColor} rounded-[6px] overflow-hidden flex items-center justify-center flex-shrink-0`}
               >
-                <div className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap">
+                {/* [수정] data-tag-text 속성 추가 */}
+                <div 
+                  data-tag-text
+                  className="text-center text-white text-[10px] font-normal font-pretendard whitespace-nowrap"
+                >
                   {tag}
                 </div>
               </div>
@@ -194,6 +449,25 @@ export default function RecommendationCard({ content, isActive = false, distance
           })}
         </div>
       )}
+
+      {/* 공유 버튼 (우측 상단, 좋아요 버튼 왼쪽) */}
+      <button
+        onClick={handleShareClick}
+        disabled={isSharing}
+        className="absolute top-4 right-14 z-20 w-8 h-8 flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/40 transition-colors disabled:opacity-50"
+        aria-label={language === 'en' ? 'Share' : '공유하기'}
+        style={{ pointerEvents: 'auto' }}
+      >
+        {isSharing ? (
+          // 로딩 중일 때 표시할 스피너
+          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        ) : (
+          <ShareIcon className="w-5 h-5" />
+        )}
+      </button>
 
       {/* 좋아요 아이콘 (우측 상단) */}
       {user && (
@@ -223,11 +497,12 @@ export default function RecommendationCard({ content, isActive = false, distance
               {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || content.genres?.[0] || (language === 'en' ? 'Movie' : '영화'))} •{content.year || ''}
             </div>
 
-            {/* 제목 - 반응형 폰트 크기, 길면 줄바꿈 */}
+            {/* [수정] 제목 영역: data-title 속성 추가 */}
             <div 
+              data-title
               className="text-white font-light font-pretendard leading-tight break-words"
               style={{ 
-                fontSize: 'clamp(20px, 5.5vw, 28px)',
+                fontSize: 'clamp(20px, 5.5vw, 28px)', // 이 clamp 값이 캡처 시 문제를 일으킴 -> 위 로직에서 px로 고정
                 wordBreak: 'keep-all',
                 overflowWrap: 'break-word',
                 lineHeight: '1.2',

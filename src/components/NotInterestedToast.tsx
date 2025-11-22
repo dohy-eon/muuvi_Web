@@ -3,7 +3,7 @@ import { languageState } from '../recoil/userState'
 
 interface NotInterestedToastProps {
   isVisible: boolean
-  message?: 'notInterested' | 'restored' // 'notInterested': 관심없음, 'restored': 관심없음 취소
+  message?: 'notInterested' | 'restored' | 'imageSaved' | 'shareFailed' // 'notInterested': 관심없음, 'restored': 관심없음 취소, 'imageSaved': 이미지 저장 성공, 'shareFailed': 공유 실패
 }
 
 // [추가] 메시지 번역
@@ -11,10 +11,14 @@ const TOAST_MESSAGES = {
   ko: {
     notInterested: '이제 이 작품은 추천되지 않아요!',
     restored: '다시 이 작품을 추천할게요!',
+    imageSaved: '이미지가 저장되었어요!',
+    shareFailed: '공유에 실패했어요',
   },
   en: {
     notInterested: 'This content will not be recommended.',
     restored: 'This content will be recommended again!',
+    imageSaved: 'Image saved!',
+    shareFailed: 'Failed to share',
   },
 }
 
@@ -25,7 +29,11 @@ export default function NotInterestedToast({ isVisible, message = 'notInterested
 
   if (!isVisible) return null
 
-  const toastMessage = message === 'restored' ? t.restored : t.notInterested
+  const toastMessage = 
+    message === 'restored' ? t.restored :
+    message === 'imageSaved' ? t.imageSaved :
+    message === 'shareFailed' ? t.shareFailed :
+    t.notInterested
 
   return (
     <div className="fixed top-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-[375px] px-5 pt-2 pointer-events-none">
