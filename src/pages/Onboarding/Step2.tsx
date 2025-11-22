@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRecoilValue, useSetRecoilState, useRecoilValue as useRecoilValueUser } from 'recoil'
 import { onboardingDataState, languageState, userState } from '../../recoil/userState'
-import { saveProfile } from '../../lib/supabase/profile'
+import { saveProfile, getProfile } from '../../lib/supabase/profile'
+import { getRecommendations } from '../../lib/supabase/recommendations'
+import { getNotInterestedContentIds } from '../../lib/supabase/notInterested'
+import type { Content } from '../../types'
 import CheckIcon from './check.svg'
 
 // [추가] 온보딩 Step2 페이지 텍스트
@@ -184,6 +187,37 @@ export default function OnboardingStep2() {
 
       // [추가] 온보딩 완료 후 이전 추천 데이터 초기화 (새로운 선택으로 인한 추천 업데이트를 위해)
       sessionStorage.removeItem('mainRecommendations')
+
+      // [추가] 메인 페이지로 이동하기 전에 추천 데이터 미리 로드
+      console.log('[온보딩 Step2] 추천 데이터 미리 로드 시작')
+      try {
+        // 프로필 가져오기
+        const profile = await getProfile(userId)
+        if (profile) {
+          // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
+          const notInterestedIdsFromDb = user 
+            ? await getNotInterestedContentIds(user.id).catch(() => [] as string[])
+            : []
+          
+          // 추천 콘텐츠 가져오기
+          const contents = await getRecommendations(profile, false)
+          
+          // 관심없음 콘텐츠 필터링
+          const filteredContents = contents.filter((content: Content) => !notInterestedIdsFromDb.includes(content.id))
+          
+          // 최대 3개만 사용
+          const finalContents = filteredContents.slice(0, 3)
+          
+          // sessionStorage에 저장 (메인 페이지에서 사용)
+          sessionStorage.setItem('mainRecommendations', JSON.stringify(finalContents))
+          sessionStorage.setItem('mainProfile', JSON.stringify(profile))
+          
+          console.log('[온보딩 Step2] 추천 데이터 미리 로드 완료:', finalContents.length, '개')
+        }
+      } catch (error) {
+        console.error('[온보딩 Step2] 추천 데이터 미리 로드 실패:', error)
+        // 에러가 발생해도 메인 페이지로 이동은 계속 진행
+      }
 
       // 메인 페이지로 이동하기 전에 이전 경로 저장
       sessionStorage.setItem('prevPath', '/onboarding/step2')
