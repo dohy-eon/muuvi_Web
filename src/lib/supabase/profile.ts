@@ -21,6 +21,14 @@ export async function saveProfile(
 
     if (existingProfile) {
       // 업데이트
+      console.log('[프로필 업데이트]', {
+        userId,
+        기존_장르: existingProfile.genre,
+        기존_무드: existingProfile.moods,
+        새_장르: data.genre,
+        새_무드: data.moods,
+      })
+      
       const { data: updated, error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -34,6 +42,13 @@ export async function saveProfile(
 
       profile = updated
       error = updateError
+      
+      if (updated) {
+        console.log('[프로필 업데이트 완료]', {
+          장르: updated.genre,
+          무드: updated.moods,
+        })
+      }
     } else {
       // 삽입
       const { data: inserted, error: insertError } = await supabase

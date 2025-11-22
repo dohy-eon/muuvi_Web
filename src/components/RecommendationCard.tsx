@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRecoilValue } from 'recoil'
 import type { Content } from '../types'
 import { useNavigate } from 'react-router-dom'
@@ -6,6 +6,8 @@ import { userState, languageState } from '../recoil/userState'
 import { addFavorite, removeFavorite, isFavorite } from '../lib/supabase/favorites'
 import LikeIcon from '../pages/MyPage/like.svg'
 import LikeCheckedIcon from '../pages/MyPage/likeChecked.svg'
+import html2canvas from 'html2canvas'
+import { saveAs } from 'file-saver'
 
 interface RecommendationCardProps {
   content: Content
@@ -13,6 +15,13 @@ interface RecommendationCardProps {
   distance?: number // 현재 카드로부터의 거리 (0 = 현재 카드)
   onCardClick?: (e: React.MouseEvent) => void // 부모에서 클릭 처리
 }
+
+// [추가] 공유 아이콘 컴포넌트 (SVG)
+const ShareIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+  </svg>
+)
 
 // 장르/태그 색상 매핑 (한국어 및 영어 키 지원)
 const genreTagColors: Record<string, string> = {
@@ -75,6 +84,11 @@ export default function RecommendationCard({ content, isActive = false, distance
   const language = useRecoilValue(languageState) // [추가] 언어 상태 가져오기
   const [isLiked, setIsLiked] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  
+  // [추가] 카드를 캡처하기 위한 ref 선언
+  const cardRef = useRef<HTMLDivElement>(null)
+  // [추가] 공유 진행 중 상태
+  const [isSharing, setIsSharing] = useState(false)
   
   // [수정] 언어에 따른 태그 선택
   const sourceTags = (language === 'en' && content.tags_en && content.tags_en.length > 0)
@@ -153,6 +167,171 @@ export default function RecommendationCard({ content, isActive = false, distance
     }
   }
 
+  // [추가] 공유 버튼 클릭 핸들러 (고해상도 캡처 및 폰트 최적화)
+  const handleShareClick = async (e: React.MouseEvent) => {
+    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
+    if (!cardRef.current || !content || isSharing) return
+
+    setIsSharing(true)
+
+    try {
+      // 0. 폰트가 모두 로드될 때까지 기다립니다 (폰트 깨짐 방지 핵심)
+      await document.fonts.ready
+
+      // 1. 현재 카드를 복제(Clone)합니다.
+      const originalElement = cardRef.current
+      
+      // 2. 원본 카드의 실제 크기를 측정합니다
+      const originalRect = originalElement.getBoundingClientRect()
+      const originalWidth = originalRect.width
+      const originalHeight = originalRect.height
+      
+      const clone = originalElement.cloneNode(true) as HTMLElement
+
+      // 3. 복제본에 data 속성 추가 (onclone에서 찾기 위해)
+      clone.setAttribute('data-card-container', 'true')
+
+      // 4. 복제된 카드의 스타일을 '고화질 증명사진'처럼 초기화합니다.
+      // 원본과 동일한 크기로 설정
+      Object.assign(clone.style, {
+        position: 'fixed',
+        top: '0px',
+        left: '0px',
+        zIndex: '-9999',
+        transform: 'none', // 회전/스케일 제거
+        filter: 'none',    // 블러 제거
+        opacity: '1',
+        width: `${originalWidth}px`, // 원본 크기 사용
+        height: `${originalHeight}px`, // 원본 크기 사용
+        minWidth: `${originalWidth}px`,
+        minHeight: `${originalHeight}px`,
+        maxWidth: `${originalWidth}px`,
+        maxHeight: `${originalHeight}px`,
+        borderRadius: '20px',
+        margin: '0',
+        padding: '0',
+        transition: 'none',
+        overflow: 'hidden', // overflow 유지
+        // [추가] 텍스트 렌더링 품질 향상 옵션
+        fontSmooth: 'antialiased',
+        WebkitFontSmoothing: 'antialiased',
+        MozOsxFontSmoothing: 'grayscale',
+        textRendering: 'optimizeLegibility',
+      })
+
+      // 5. 복제본을 body에 추가 (먼저 추가해야 getBoundingClientRect() 작동)
+      document.body.appendChild(clone)
+
+      // 6. 복제본 내부 요소들의 위치를 원본과 정확히 맞추기
+      // 모든 absolute/fixed 요소들의 위치를 상대 좌표로 계산하여 복사
+      const originalElements = originalElement.querySelectorAll('*')
+      const cloneElements = clone.querySelectorAll('*')
+      
+      originalElements.forEach((originalEl, index) => {
+        const cloneEl = cloneElements[index] as HTMLElement
+        if (!cloneEl) return
+        
+        const originalElRect = originalEl.getBoundingClientRect()
+        const originalParentRect = (originalEl.parentElement || originalElement).getBoundingClientRect()
+        const computedStyle = window.getComputedStyle(originalEl)
+        
+        // absolute 또는 fixed 위치인 요소들의 위치 복사
+        if (computedStyle.position === 'absolute' || computedStyle.position === 'fixed') {
+          // 원본 요소의 상대 위치 계산
+          const top = originalElRect.top - originalParentRect.top
+          const left = originalElRect.left - originalParentRect.left
+          
+          // 복제본 요소에 위치 적용
+          cloneEl.style.position = 'absolute'
+          cloneEl.style.top = `${top}px`
+          cloneEl.style.left = `${left}px`
+          cloneEl.style.width = `${originalElRect.width}px`
+          cloneEl.style.height = `${originalElRect.height}px`
+        }
+      })
+
+      // 7. 약간의 지연을 주어 스타일 적용이 완료되도록 대기
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // 8. html2canvas 옵션 최적화 (원본 크기 사용)
+      const canvas = await html2canvas(clone, {
+        useCORS: true, // 외부 리소스 캡처를 위해 필수
+        scale: 4, // [중요] 해상도를 2에서 4로 높임 (텍스트 선명도 향상)
+        backgroundColor: null, // 배경 투명하게
+        logging: false,
+        width: originalWidth, // 원본 너비 사용
+        height: originalHeight, // 원본 높이 사용
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        // [추가] 폰트 렌더링 보정
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.body.querySelector('[data-card-container]') as HTMLElement
+          if (clonedElement) {
+            // 혹시 모를 폰트 로딩 문제 방지를 위해 폰트 패밀리 강제 재지정
+            clonedElement.style.fontFamily = 'Pretendard, -apple-system, BlinkMacSystemFont, sans-serif'
+            
+            // 모든 텍스트 요소에 폰트 재적용
+            const allTextElements = clonedElement.querySelectorAll('*')
+            allTextElements.forEach((el) => {
+              const htmlEl = el as HTMLElement
+              if (htmlEl.textContent && htmlEl.textContent.trim().length > 0) {
+                htmlEl.style.fontFamily = 'Pretendard, -apple-system, BlinkMacSystemFont, sans-serif'
+              }
+            })
+          }
+        },
+      })
+
+      // 9. 복제본 제거
+      document.body.removeChild(clone)
+
+      // 10. 캔버스를 Blob 데이터로 변환
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          console.error('이미지 생성 실패')
+          setIsSharing(false)
+          return
+        }
+
+        const title = (language === 'en' && content.title_en) ? content.title_en : content.title
+        const safeTitle = title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_').replace(/\s+/g, '_')
+        const fileName = `muuvi_${safeTitle}.png`
+        const file = new File([blob], fileName, { type: 'image/png' })
+
+        // 8. Web Share API 시도 (모바일 등 지원 환경)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: title,
+              text: language === 'en' 
+                ? `Found this amazing content on Muuvi! "${title}"`
+                : `Muuvi에서 발견한 인생 영화! "${title}"`,
+              files: [file],
+            })
+            console.log('공유 성공')
+          } catch (shareError) {
+            // 사용자가 공유 취소한 경우 등 에러 처리
+            if ((shareError as Error).name !== 'AbortError') {
+              console.error('공유 실패:', shareError)
+              // 공유 실패 시 폴백으로 다운로드 시도
+              saveAs(blob, fileName)
+            }
+          }
+        } else {
+          // 9. Web Share API 미지원 시 폴백 (파일 다운로드 - 데스크탑 등)
+          saveAs(blob, fileName)
+        }
+        setIsSharing(false)
+      }, 'image/png', 1.0) // [추가] 이미지 품질 1.0 (최대) 설정
+
+    } catch (error) {
+      console.error('이미지 캡처 중 오류 발생:', error)
+      setIsSharing(false)
+    }
+  }
+
 
   // 거리에 따른 블러 및 투명도 계산
   const blurAmount = Math.abs(distance) === 0 ? 0 : Math.abs(distance) === 1 ? 8 : 12
@@ -161,6 +340,8 @@ export default function RecommendationCard({ content, isActive = false, distance
 
   return (
     <div
+      ref={cardRef}
+      data-card-container="true"
       className="w-[280px] h-[400px] relative rounded-[20px] overflow-hidden cursor-pointer flex-shrink-0 transition-all duration-500 ease-out"
       style={{
         opacity,
@@ -194,6 +375,25 @@ export default function RecommendationCard({ content, isActive = false, distance
           })}
         </div>
       )}
+
+      {/* 공유 버튼 (우측 상단, 좋아요 버튼 왼쪽) */}
+      <button
+        onClick={handleShareClick}
+        disabled={isSharing}
+        className="absolute top-4 right-14 z-20 w-8 h-8 flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/40 transition-colors disabled:opacity-50"
+        aria-label={language === 'en' ? 'Share' : '공유하기'}
+        style={{ pointerEvents: 'auto' }}
+      >
+        {isSharing ? (
+          // 로딩 중일 때 표시할 스피너
+          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        ) : (
+          <ShareIcon className="w-5 h-5" />
+        )}
+      </button>
 
       {/* 좋아요 아이콘 (우측 상단) */}
       {user && (

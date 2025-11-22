@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useRecoilValue } from 'recoil'
 import { languageState } from '../../recoil/userState'
@@ -6,6 +6,8 @@ import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content, OTTProvider } from '../../types'
 import BottomNavigation from '../../components/BottomNavigation'
 import SimpleLoading from '../../components/SimpleLoading'
+import html2canvas from 'html2canvas'
+import { saveAs } from 'file-saver'
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ''
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -38,6 +40,7 @@ const CONTENT_TEXT = {
     rent: '대여',
     buy: '구매',
     back: '뒤로가기',
+    share: '공유하기',
   },
   en: {
     originalTitle: 'Original Title',
@@ -65,8 +68,16 @@ const CONTENT_TEXT = {
     rent: 'Rent',
     buy: 'Buy',
     back: 'Back',
+    share: 'Share',
   },
 }
+
+// [추가] 공유 아이콘 컴포넌트 (SVG)
+const ShareIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+  </svg>
+)
 
 interface TMDBWatchProvider {
   provider_id: number
@@ -544,6 +555,11 @@ export default function Content() {
   const [director, setDirector] = useState<string | null>(null)
   const [writer, setWriter] = useState<string | null>(null)
   const [mediaItems, setMediaItems] = useState<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>>([])
+  
+  // [추가] 캡처할 포스터 영역 ref
+  const posterRef = useRef<HTMLDivElement>(null)
+  // [추가] 공유 진행 중 상태
+  const [isSharing, setIsSharing] = useState(false)
 
   useEffect(() => {
     const loadContent = async () => {
@@ -620,6 +636,65 @@ export default function Content() {
   const handleFilterClick = useCallback((filterType: OttFilterType) => {
     setSelectedFilter(prev => prev === filterType ? null : filterType)
   }, [])
+
+  // [추가] 공유 버튼 클릭 핸들러
+  const handleShareClick = async () => {
+    if (!posterRef.current || !content || isSharing) return
+
+    setIsSharing(true)
+
+    try {
+      // 1. html2canvas를 사용하여 포스터 영역을 캔버스로 변환
+      const canvas = await html2canvas(posterRef.current, {
+        useCORS: true, // 외부 리소스 캡처를 위해 필수
+        scale: 2, // 고해상도 캡처
+        backgroundColor: null, // 배경 투명하게
+        logging: false,
+      })
+
+      // 2. 캔버스를 Blob 데이터로 변환
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          console.error('이미지 생성 실패')
+          setIsSharing(false)
+          return
+        }
+
+        const title = (language === 'en' && content.title_en) ? content.title_en : content.title
+        const fileName = `muuvi_${title.replace(/\s+/g, '_')}.png`
+        const file = new File([blob], fileName, { type: 'image/png' })
+
+        // 3. Web Share API 시도 (모바일 등 지원 환경)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: title,
+              text: language === 'en' 
+                ? `Found this amazing content on Muuvi! "${title}"`
+                : `Muuvi에서 발견한 인생 영화! "${title}"`,
+              files: [file],
+            })
+            console.log('공유 성공')
+          } catch (shareError) {
+            // 사용자가 공유 취소한 경우 등 에러 처리
+            if ((shareError as Error).name !== 'AbortError') {
+              console.error('공유 실패:', shareError)
+              // 공유 실패 시 폴백으로 다운로드 시도
+              saveAs(blob, fileName)
+            }
+          }
+        } else {
+          // 4. Web Share API 미지원 시 폴백 (파일 다운로드 - 데스크탑 등)
+          saveAs(blob, fileName)
+        }
+        setIsSharing(false)
+      }, 'image/png')
+
+    } catch (error) {
+      console.error('이미지 캡처 중 오류 발생:', error)
+      setIsSharing(false)
+    }
+  }
 
   // 이미지 밝기 계산 함수 (상단 부분만 샘플링하여 뒤로가기 버튼 위치의 밝기 확인)
   const calculateImageBrightness = useCallback((imageUrl: string) => {
@@ -744,8 +819,27 @@ export default function Content() {
           </svg>
         </button>
 
+        {/* [추가] 공유 버튼 (우측 상단, 뒤로가기 버튼 반대편) */}
+        <button
+          onClick={handleShareClick}
+          disabled={isSharing}
+          className={`absolute top-[20px] right-5 z-20 w-10 h-10 flex items-center justify-center bg-black/20 backdrop-blur-sm rounded-full hover:bg-black/40 transition-colors disabled:opacity-50 ${
+            isBackgroundDark ? 'text-white' : 'text-black bg-white/40'
+          }`}
+          aria-label={t.share}
+        >
+          {isSharing ? (
+            <svg className="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <ShareIcon className="w-6 h-6" />
+          )}
+        </button>
+
       {/* 메인 포스터 배경 (378px 높이) */}
-      <div className="relative w-full h-[378px] overflow-hidden">
+      <div ref={posterRef} className="relative w-full h-[378px] overflow-hidden">
         {content.poster_url && (
           <>
             <img

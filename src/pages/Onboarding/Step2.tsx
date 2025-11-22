@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useRecoilValue, useSetRecoilState } from 'recoil'
-import { onboardingDataState, languageState } from '../../recoil/userState'
+import { useRecoilValue, useSetRecoilState, useRecoilValue as useRecoilValueUser } from 'recoil'
+import { onboardingDataState, languageState, userState } from '../../recoil/userState'
 import { saveProfile } from '../../lib/supabase/profile'
 import CheckIcon from './check.svg'
 
@@ -115,6 +115,7 @@ export default function OnboardingStep2() {
   const navigate = useNavigate()
   const onboardingData = useRecoilValue(onboardingDataState)
   const setOnboardingData = useSetRecoilState(onboardingDataState)
+  const user = useRecoilValueUser(userState) // [추가] 사용자 정보 가져오기
   const language = useRecoilValue(languageState)
   const t = ONBOARDING_STEP2_TEXT[language]
 
@@ -165,10 +166,25 @@ export default function OnboardingStep2() {
       }
       setOnboardingData(updatedData)
 
-      // Supabase에 저장 (임시로 localStorage 사용, 실제로는 인증된 user_id 필요)
-      const userId = 'temp-user-id' // 실제로는 인증된 사용자 ID 사용
+      // [수정] 실제 user_id 사용 (로그인한 사용자는 user.id, 비로그인은 temp-user-id)
+      const userId = user?.id || 'temp-user-id'
+      
+      // 디버깅: 저장할 데이터 확인
+      console.log('[온보딩 Step2 저장]', {
+        userId,
+        genre: updatedData.genre,
+        moods: updatedData.moods,
+        moodNames: updatedData.moods.map(id => {
+          const mood = genres.find(g => g.id === id)
+          return mood ? (language === 'en' ? mood.english : mood.korean) : id
+        }),
+      })
+      
       await saveProfile(userId, updatedData)
 
+      // [추가] 온보딩 완료 후 이전 추천 데이터 초기화 (새로운 선택으로 인한 추천 업데이트를 위해)
+      sessionStorage.removeItem('mainRecommendations')
+      
       // 메인 페이지로 이동하기 전에 이전 경로 저장
       sessionStorage.setItem('prevPath', '/onboarding/step2')
       navigate('/main')

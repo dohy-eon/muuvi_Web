@@ -63,9 +63,18 @@ export async function getRecommendations(
 ): Promise<Content[]> {
   try {
     // 1. 사용자의 선택을 AI가 이해할 수 있는 "검색 텍스트"로 변환
-    const moodNames = profile.moods.map(id => moodIdToKorean[id] || '').join(' ')
-    const queryText = `${moodNames} ${profile.genre}` // 예: "힐링 로맨스 드라마"
+    const moodNames = profile.moods.map(id => moodIdToKorean[id] || '').filter(Boolean).join(' ')
+    const queryText = `${moodNames} ${profile.genre}`.trim() // 예: "로맨스 코미디 영화"
     const p_mood_tags = moodsToImdbTags(profile.moods)
+    
+    // 디버깅: 검색 쿼리 확인
+    console.log('[추천 검색 쿼리]', {
+      queryText,
+      genre: profile.genre,
+      moods: profile.moods,
+      moodNames: moodNames,
+      moodTags: p_mood_tags,
+    })
 
     // [추가] 사용자의 구독 정보 확인
     const subscribedOtts = profile.subscribed_otts || []
