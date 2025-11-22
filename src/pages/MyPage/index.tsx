@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { userState, languageState } from '../../recoil/userState'
 import { addFavorite, removeFavorite, getFavorites, getFavoriteCount } from '../../lib/supabase/favorites'
 import { getNotInterestedContents, getNotInterestedCount, removeNotInterested } from '../../lib/supabase/notInterested'
+import { getProfile } from '../../lib/supabase/profile'
 import BottomNavigation from '../../components/BottomNavigation'
 import MuuviLogoPrimary from '../../assets/MuuviLogoPrimary.svg'
 import GoogleLogo from '../../assets/googleLogo.svg'
@@ -369,7 +370,7 @@ export default function MyPage() {
 
   const [favoriteCount, setFavoriteCount] = useState(0)
   const [notInterestedCount, setNotInterestedCount] = useState(0)
-  const [subscribedServiceCount, _setSubscribedServiceCount] = useState(0)
+  const [subscribedServiceCount, setSubscribedServiceCount] = useState(0)
   const [favoriteContents, setFavoriteContents] = useState<Content[]>([])
   const [notInterestedContents, setNotInterestedContents] = useState<Content[]>([])
 
@@ -381,21 +382,30 @@ export default function MyPage() {
         setFavoriteContents([])
         setNotInterestedCount(0)
         setNotInterestedContents([])
+        setSubscribedServiceCount(0)
         return
       }
 
       try {
-        const [favorites, favoriteCount, notInterested, notInterestedCount] = await Promise.all([
+        const [favorites, favoriteCount, notInterested, notInterestedCount, profile] = await Promise.all([
           getFavorites(user.id),
           getFavoriteCount(user.id),
           getNotInterestedContents(user.id),
-          getNotInterestedCount(user.id)
+          getNotInterestedCount(user.id),
+          getProfile(user.id) // 프로필 조회 추가
         ])
         
         setFavoriteContents(favorites)
         setFavoriteCount(favoriteCount)
         setNotInterestedContents(notInterested)
         setNotInterestedCount(notInterestedCount)
+        
+        // 구독 서비스 개수 설정
+        if (profile?.subscribed_otts) {
+          setSubscribedServiceCount(profile.subscribed_otts.length)
+        } else {
+          setSubscribedServiceCount(0)
+        }
       } catch (error) {
         console.error('데이터 로드 실패:', error)
       }

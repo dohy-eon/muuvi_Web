@@ -88,6 +88,15 @@ export default function Main() {
   const [showLoadingScreen, setShowLoadingScreen] = useState(false) // 온보딩에서 넘어올 때만 true
   const [showSimpleLoading, setShowSimpleLoading] = useState(false) // 마이페이지에서 넘어올 때 사용
   const [profile, setProfile] = useState<Profile | null>(null)
+  
+  // 추천 데이터를 sessionStorage에 저장하는 함수
+  const saveRecommendationsToStorage = (contents: Content[]) => {
+    try {
+      sessionStorage.setItem('mainRecommendations', JSON.stringify(contents))
+    } catch (error) {
+      console.error('추천 데이터 저장 실패:', error)
+    }
+  }
   const onboardingData = useRecoilValue(onboardingDataState)
   // 현재 표시 중인 카드의 인덱스 상태
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -108,6 +117,7 @@ export default function Main() {
   // 온보딩으로 이동하는 함수
   const handleRestart = () => {
     setRecommendations([])
+    saveRecommendationsToStorage([]) // sessionStorage도 초기화
     setProfile(null)
     setOnboardingData(null)
     setIsLoading(false)
@@ -123,12 +133,18 @@ export default function Main() {
         return
       }
 
-      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시 (useEffect에서 이미 설정됨)
+      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시
       const shouldShowLoading = onboardingData && !forceRefresh && recommendations.length === 0
+      
+      // 로딩 화면 표시 (온보딩에서 넘어온 경우만, 다른 경우는 백그라운드 로드)
+      if (shouldShowLoading) {
+        setIsLoading(true)
+        setShowLoadingScreen(true)
+      }
 
       try {
-        // 임시 user_id (실제로는 인증된 사용자 ID 사용)
-        const userId = 'temp-user-id'
+        // 실제 user_id 사용 (로그인한 사용자는 user.id, 비로그인은 temp-user-id)
+        const userId = user?.id || 'temp-user-id'
 
         // 프로필 가져오기 또는 생성
         let profile = await getProfile(userId)
@@ -140,9 +156,24 @@ export default function Main() {
           profile = updatedProfile ?? profile
         }
 
+        // 로그인한 사용자의 경우 최신 프로필 정보 다시 가져오기 (subscribed_otts 포함)
+        if (user && profile) {
+          const latestProfile = await getProfile(user.id)
+          if (latestProfile) {
+            profile = latestProfile // subscribed_otts 등 최신 정보 반영
+          }
+        }
+
         if (profile) {
           // 프로필 저장
           setProfile(profile)
+          
+          // 디버깅: 프로필에 구독 정보가 있는지 확인
+          console.log('[프로필 로드]', {
+            userId,
+            hasSubscribedOtts: !!profile.subscribed_otts,
+            subscribedOtts: profile.subscribed_otts,
+          })
           
           // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
           let notInterestedIdsFromDb: string[] = []
@@ -166,6 +197,8 @@ export default function Main() {
           contents = contents.slice(0, 3)
           
           setRecommendations(contents)
+          // sessionStorage에 저장 (페이지 이동 후에도 유지)
+          saveRecommendationsToStorage(contents)
           // 추천 로드 시 인덱스 초기화
           setCurrentIndex(0)
         }
@@ -179,7 +212,7 @@ export default function Main() {
         }
         setShowSimpleLoading(false)
       }
-  }, [onboardingData, recommendations.length])
+  }, [onboardingData, recommendations.length, user])
 
   const handleRerecommend = () => {
     void loadRecommendations(true)
@@ -190,26 +223,57 @@ export default function Main() {
     // sessionStorage에서 이전 경로 가져오기
     const prevPath = sessionStorage.getItem('prevPath') || prevPathRef.current
     
-    // 추천 데이터가 없을 때만 로딩 화면 표시
-    if (recommendations.length === 0) {
-      // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시
-      if (prevPath?.includes('/onboarding')) {
-        setShowLoadingScreen(true)
-        setIsLoading(true)
-        setShowSimpleLoading(false)
-      } else {
-        // 마이페이지에서 넘어온 경우 또는 다른 경로에서 넘어온 경우 간단한 로딩 화면 표시
-        setShowSimpleLoading(true)
-        setShowLoadingScreen(false)
-        setIsLoading(false)
+    // sessionStorage에서 저장된 추천 데이터 복원 시도
+    try {
+      const storedRecommendations = sessionStorage.getItem('mainRecommendations')
+      if (storedRecommendations && recommendations.length === 0) {
+        const parsed = JSON.parse(storedRecommendations) as Content[]
+        if (parsed && parsed.length > 0) {
+          // 복원된 데이터가 있으면 즉시 표시하고 로딩 없음
+          setRecommendations(parsed)
+          setIsLoading(false)
+          setShowSimpleLoading(false)
+          setShowLoadingScreen(false)
+          // 이전 경로만 저장하고 로드하지 않음
+          prevPathRef.current = currentPath
+          sessionStorage.setItem('prevPath', currentPath)
+          return
+        }
       }
+    } catch (error) {
+      console.error('추천 데이터 복원 실패:', error)
+    }
+    
+    // 이미 추천 데이터가 있으면 로딩 화면을 보여주지 않고 바로 표시하고 return
+    if (recommendations.length > 0) {
+      setIsLoading(false)
+      setShowSimpleLoading(false)
+      setShowLoadingScreen(false)
+      // 이전 경로만 저장하고 로드하지 않음
+      prevPathRef.current = currentPath
+      sessionStorage.setItem('prevPath', currentPath)
+      return
+    }
+    
+    // 추천 데이터가 없을 때만 로딩 화면 표시 및 데이터 로드
+    // 온보딩에서 넘어온 경우에만 상세 로딩 화면 표시
+    if (prevPath?.includes('/onboarding')) {
+      setShowLoadingScreen(true)
+      setIsLoading(true)
+      setShowSimpleLoading(false)
+    } else {
+      // 마이페이지나 다른 경로에서 넘어온 경우
+      // 백그라운드에서 로드하되 로딩 화면은 표시하지 않음 (빠른 전환을 위해)
+      setShowSimpleLoading(false)
+      setShowLoadingScreen(false)
+      setIsLoading(false)
     }
     
     // 이전 경로 저장 (다음 렌더링을 위해)
     prevPathRef.current = currentPath
     sessionStorage.setItem('prevPath', currentPath)
     
-    // 데이터 로드 시작
+    // 데이터 로드 시작 (이미 데이터가 있으면 loadRecommendations 내부에서 early return 됨)
     void loadRecommendations()
   }, [loadRecommendations, recommendations.length, location.pathname])
 

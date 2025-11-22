@@ -41,6 +41,7 @@ export interface Profile {
   user_id: string
   genre: string
   moods: string[]
+  subscribed_otts?: string[] // [추가] 구독 중인 OTT 서비스 ID 목록
   created_at: string
   updated_at: string
 }

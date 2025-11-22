@@ -38,7 +38,7 @@ async function getFunctionAuthHeaders() {
   return headers
 }
 import { moodsToImdbTags } from '../moodMapping.ts' // 1차 필터링을 위해 유지
-import type { Content, Profile } from '../../types/index.ts'
+import type { Content, Profile, OTTProvider } from '../../types/index.ts'
 
 // [추가] 무드 ID를 한글로 변환 (검색어 생성용)
 const moodIdToKorean: Record<string, string> = {
@@ -67,9 +67,20 @@ export async function getRecommendations(
     const queryText = `${moodNames} ${profile.genre}` // 예: "힐링 로맨스 드라마"
     const p_mood_tags = moodsToImdbTags(profile.moods)
 
+    // [추가] 사용자의 구독 정보 확인
+    const subscribedOtts = profile.subscribed_otts || []
+    const hasSubscriptions = subscribedOtts.length > 0
+
+    // 디버깅: 구독 정보 확인
+    console.log('[OTT 필터링 정보]', {
+      hasSubscriptions,
+      subscribedOtts,
+      subscribedOttsLength: subscribedOtts.length,
+    })
+
     // 2. AI 벡터 검색 시도
     try {
-      console.log(`[AI 추천 시도] "${queryText}"`)
+      console.log(`[AI 추천 시도] "${queryText}" (구독필터: ${hasSubscriptions ? 'ON' : 'OFF'}, OTT: ${subscribedOtts.join(', ') || '없음'})`)
       
       // 검색 텍스트를 "검색 벡터"로 변환
       const { data: embedData, error: embedError } = await supabase.functions.invoke(
@@ -85,10 +96,10 @@ export async function getRecommendations(
       const query_vector = embedData.vector
       
       // DB의 'match_contents' 함수(RPC)를 호출
-      // 관심없음 콘텐츠를 제외하기 위해 충분한 개수 요청
+      // [수정] 필터링을 위해 더 많은 후보군(30개)을 가져옵니다.
       const { data, error } = await supabase.rpc('match_contents', {
         query_vector: query_vector,
-        match_count: 10, // 더 많은 개수 요청 (관심없음 제외 후에도 3개 이상 확보)
+        match_count: 30, // 10 -> 30 증가
         p_genre: profile.genre,
         p_mood_tags: p_mood_tags
       })
@@ -98,10 +109,51 @@ export async function getRecommendations(
         throw error
       }
       
-      // OTT 제공자가 있는 콘텐츠만 필터링
-      const contentsWithOTT = (data || []).filter(
+      // [수정] OTT 필터링 로직 강화
+      let contentsWithOTT = (data || []).filter(
         (content: Content) => content.ott_providers && content.ott_providers.length > 0
       )
+
+      // 2. 사용자가 구독 서비스를 설정했다면, 해당 서비스가 포함된 콘텐츠만 필터링
+      if (hasSubscriptions) {
+        console.log(`[OTT 필터링 시작] ${contentsWithOTT.length}개 콘텐츠 중에서 구독 서비스(${subscribedOtts.join(', ')}) 필터링`)
+        
+        // 구독 중인 서비스가 하나라도 포함된 콘텐츠 필터링
+        const subscribedContents = contentsWithOTT.filter((content: Content) => {
+          const hasSubscribedProvider = content.ott_providers?.some((provider: OTTProvider) => {
+            const providerIdStr = String(provider.provider_id)
+            const isMatch = subscribedOtts.includes(providerIdStr)
+            if (isMatch) {
+              console.log(`[OTT 매칭] ${content.title} - Provider ID: ${providerIdStr}, Name: ${provider.provider_name}`)
+            }
+            return isMatch
+          })
+          return hasSubscribedProvider
+        })
+        
+        console.log(`[OTT 필터링 결과] 구독 서비스 콘텐츠: ${subscribedContents.length}개`)
+        
+        // 만약 필터링 결과가 너무 적으면(예: 0개), 필터링을 완화하거나 원본을 사용하고 우선순위만 조정할 수도 있음
+        // 여기서는 결과가 있으면 구독 컨텐츠만, 없으면 전체(OTT 있는) 컨텐츠를 보여주되 로그를 남김
+        if (subscribedContents.length > 0) {
+          contentsWithOTT = subscribedContents
+          console.log(`[OTT 필터링 적용] ${subscribedContents.length}개 구독 서비스 콘텐츠만 반환`)
+        } else {
+          console.warn('[OTT 필터링 실패] 구독 중인 서비스의 콘텐츠가 없어 전체 OTT 콘텐츠를 반환합니다.')
+          // 디버깅: OTT 제공자 정보 확인
+          if (contentsWithOTT.length > 0) {
+            console.log('[OTT 디버깅] 샘플 콘텐츠의 OTT 제공자:', {
+              title: contentsWithOTT[0].title,
+              providers: contentsWithOTT[0].ott_providers?.map((p: OTTProvider) => ({
+                id: p.provider_id,
+                name: p.provider_name,
+                idStr: String(p.provider_id),
+              })),
+              subscribedIds: subscribedOtts,
+            })
+          }
+        }
+      }
 
       if (contentsWithOTT.length > 0) {
         console.log(`[AI 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
@@ -131,9 +183,10 @@ export async function getRecommendations(
         query = query.overlaps('tags', p_mood_tags)
       }
       
+      // 태그 검색도 충분히 많이 가져옵니다.
       const { data: tagData, error: tagError } = await query
         .order('imdb_rating', { ascending: false, nullsFirst: false })
-        .limit(30) // 더 많은 개수 요청
+        .limit(50)
       
       if (tagError) {
         console.error('[태그 검색 실패]:', tagError)
@@ -141,9 +194,27 @@ export async function getRecommendations(
       }
       
       // OTT 필터링
-      const contentsWithOTT = (tagData || []).filter(
+      let contentsWithOTT = (tagData || []).filter(
         (content: Content) => content.ott_providers && content.ott_providers.length > 0
       )
+
+      // OTT 필터링 (태그 검색에서도 동일하게 적용)
+      if (hasSubscriptions) {
+        console.log(`[태그 검색 OTT 필터링] ${contentsWithOTT.length}개 콘텐츠 중에서 구독 서비스(${subscribedOtts.join(', ')}) 필터링`)
+        
+        const subscribedContents = contentsWithOTT.filter((content: Content) => 
+          content.ott_providers?.some((provider: OTTProvider) => 
+            subscribedOtts.includes(String(provider.provider_id))
+          )
+        )
+        
+        if (subscribedContents.length > 0) {
+          contentsWithOTT = subscribedContents
+          console.log(`[태그 검색 OTT 필터링 적용] ${subscribedContents.length}개 구독 서비스 콘텐츠만 반환`)
+        } else {
+          console.warn('[태그 검색 OTT 필터링 실패] 구독 중인 서비스의 콘텐츠가 없어 전체 OTT 콘텐츠를 반환합니다.')
+        }
+      }
       
       console.log(`[태그 추천 성공] "${queryText}" => ${contentsWithOTT.length}개 반환`)
 

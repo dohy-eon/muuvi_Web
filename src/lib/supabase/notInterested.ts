@@ -62,17 +62,19 @@ export async function isNotInterested(userId: string, contentId: string): Promis
       .select('id')
       .eq('user_id', userId)
       .eq('content_id', contentId)
-      .single()
+      .maybeSingle() // .single() 대신 .maybeSingle() 사용 - 레코드가 없어도 에러가 아님
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // 데이터가 없음
+      // 406 에러나 다른 에러는 레코드가 없다는 의미로 처리
+      if (error.code === 'PGRST116' || error.code === '406' || error.message?.includes('Not Acceptable')) {
+        // 데이터가 없음 (정상)
         return false
       }
       console.error('관심없음 상태 확인 실패:', error)
       return false
     }
 
+    // data가 null이면 관심없음이 아닌 것
     return !!data
   } catch (error) {
     console.error('관심없음 상태 확인 중 오류:', error)
