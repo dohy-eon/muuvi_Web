@@ -38,7 +38,7 @@ async function getFunctionAuthHeaders() {
   return headers
 }
 import { moodsToImdbTags } from '../moodMapping.ts' // 1차 필터링을 위해 유지
-import type { Content, Profile } from '../../types/index.ts'
+import type { Content, Profile, OTTProvider } from '../../types/index.ts'
 
 // [추가] 무드 ID를 한글로 변환 (검색어 생성용)
 const moodIdToKorean: Record<string, string> = {
@@ -119,8 +119,8 @@ export async function getRecommendations(
         console.log(`[OTT 필터링 시작] ${contentsWithOTT.length}개 콘텐츠 중에서 구독 서비스(${subscribedOtts.join(', ')}) 필터링`)
         
         // 구독 중인 서비스가 하나라도 포함된 콘텐츠 필터링
-        const subscribedContents = contentsWithOTT.filter(content => {
-          const hasSubscribedProvider = content.ott_providers?.some(provider => {
+        const subscribedContents = contentsWithOTT.filter((content: Content) => {
+          const hasSubscribedProvider = content.ott_providers?.some((provider: OTTProvider) => {
             const providerIdStr = String(provider.provider_id)
             const isMatch = subscribedOtts.includes(providerIdStr)
             if (isMatch) {
@@ -144,7 +144,7 @@ export async function getRecommendations(
           if (contentsWithOTT.length > 0) {
             console.log('[OTT 디버깅] 샘플 콘텐츠의 OTT 제공자:', {
               title: contentsWithOTT[0].title,
-              providers: contentsWithOTT[0].ott_providers?.map(p => ({
+              providers: contentsWithOTT[0].ott_providers?.map((p: OTTProvider) => ({
                 id: p.provider_id,
                 name: p.provider_name,
                 idStr: String(p.provider_id),
@@ -202,8 +202,8 @@ export async function getRecommendations(
       if (hasSubscriptions) {
         console.log(`[태그 검색 OTT 필터링] ${contentsWithOTT.length}개 콘텐츠 중에서 구독 서비스(${subscribedOtts.join(', ')}) 필터링`)
         
-        const subscribedContents = contentsWithOTT.filter(content => 
-          content.ott_providers?.some(provider => 
+        const subscribedContents = contentsWithOTT.filter((content: Content) => 
+          content.ott_providers?.some((provider: OTTProvider) => 
             subscribedOtts.includes(String(provider.provider_id))
           )
         )
