@@ -127,8 +127,8 @@ export default function Main() {
       const shouldShowLoading = onboardingData && !forceRefresh && recommendations.length === 0
 
       try {
-        // 임시 user_id (실제로는 인증된 사용자 ID 사용)
-        const userId = 'temp-user-id'
+        // 실제 user_id 사용 (로그인한 사용자는 user.id, 비로그인은 temp-user-id)
+        const userId = user?.id || 'temp-user-id'
 
         // 프로필 가져오기 또는 생성
         let profile = await getProfile(userId)
@@ -140,9 +140,24 @@ export default function Main() {
           profile = updatedProfile ?? profile
         }
 
+        // 로그인한 사용자의 경우 최신 프로필 정보 다시 가져오기 (subscribed_otts 포함)
+        if (user && profile) {
+          const latestProfile = await getProfile(user.id)
+          if (latestProfile) {
+            profile = latestProfile // subscribed_otts 등 최신 정보 반영
+          }
+        }
+
         if (profile) {
           // 프로필 저장
           setProfile(profile)
+          
+          // 디버깅: 프로필에 구독 정보가 있는지 확인
+          console.log('[프로필 로드]', {
+            userId,
+            hasSubscribedOtts: !!profile.subscribed_otts,
+            subscribedOtts: profile.subscribed_otts,
+          })
           
           // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
           let notInterestedIdsFromDb: string[] = []
@@ -179,7 +194,7 @@ export default function Main() {
         }
         setShowSimpleLoading(false)
       }
-  }, [onboardingData, recommendations.length])
+  }, [onboardingData, recommendations.length, user])
 
   const handleRerecommend = () => {
     void loadRecommendations(true)
