@@ -933,6 +933,32 @@ export default function Main() {
       </div>
       </div>
 
+      {/* [추가] 유니버스 진입 버튼 (우측 하단 플로팅) */}
+      {/* Selection Info Card가 있을 때는 더 위로 배치하여 겹침 방지 */}
+      <button
+        onClick={() => navigate('/universe')}
+        className={`fixed right-5 z-40 w-14 h-14 rounded-full backdrop-blur-md bg-[#2e2c6a]/90 shadow-[0_8px_32px_0_rgba(46,44,106,0.3),inset_0px_0px_4px_0px_rgba(255,255,255,0.1)] border border-white/10 flex items-center justify-center text-white hover:bg-[#3a3878]/90 hover:scale-105 transition-all active:scale-95 ${
+          (displayGenre || moodNames) ? 'bottom-36' : 'bottom-20'
+        }`}
+        aria-label="Go to Universe"
+      >
+        {/* 별/우주 아이콘 */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+          className="w-6 h-6"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
+          />
+        </svg>
+      </button>
+
       {/* Absolute 하단 네비게이션 (오버레이) */}
       <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">

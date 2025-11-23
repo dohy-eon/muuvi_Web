@@ -14,6 +14,7 @@ const ContentTMDB = lazy(() => import('./pages/ContentTMDB'))
 const MyPage = lazy(() => import('./pages/MyPage'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Search = lazy(() => import('./pages/Search'))
+const Universe = lazy(() => import('./pages/Universe'))
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
                   <Route path="/mypage" element={<MyPage />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/search" element={<Search />} />
+                  <Route path="/universe" element={<Universe />} />
                   <Route path="/" element={<Splash />} />
                 </Routes>
               </Suspense>
