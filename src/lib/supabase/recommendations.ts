@@ -39,6 +39,7 @@ async function getFunctionAuthHeaders() {
 }
 import { moodsToImdbTags } from '../moodMapping.ts' // 1차 필터링을 위해 유지
 import type { Content, Profile, OTTProvider } from '../../types/index.ts'
+import { getProfile } from './profile.ts' // [추가] 구독 정보 확인용
 
 // [추가] 무드 ID를 한글로 변환 (검색어 생성용)
 const moodIdToKorean: Record<string, string> = {
@@ -322,6 +323,74 @@ export async function syncImdbContent(imdbId: string): Promise<Content | null> {
   } catch (error) {
     console.error('IMDB 동기화 중 오류:', error)
     return null
+  }
+}
+
+/**
+ * [수정] 텍스트(문장) 기반 AI 추천 (구독 필터링 적용)
+ * 사용자의 발화 내용을 임베딩하여 유사한 콘텐츠를 찾습니다.
+ */
+export async function getRecommendationsByText(queryText: string): Promise<Content[]> {
+  try {
+    console.log(`[AI 텍스트 검색 시도] "${queryText}"`)
+
+    // 1. 텍스트 임베딩
+    const { data: embedData, error: embedError } = await supabase.functions.invoke(
+      'embed',
+      { body: { text: queryText } }
+    )
+
+    if (embedError) throw embedError
+
+    const query_vector = embedData.vector
+
+    // 2. 벡터 검색
+    const { data, error } = await supabase.rpc('match_contents', {
+      query_vector: query_vector,
+      match_count: 30, // 충분한 후보군 확보 (필터링 대비)
+      p_genre: null,   // 장르 무관
+      p_mood_tags: []  // 태그 무관
+    })
+
+    if (error) throw error
+
+    // 3. 기본 OTT 필터링 (OTT 정보가 있는 것만)
+    let contentsWithOTT = (data || []).filter(
+      (content: Content) => content.ott_providers && content.ott_providers.length > 0
+    )
+
+    // 4. [추가] 사용자 구독 정보 기반 필터링 및 정렬
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const userId = session?.session?.user?.id
+      
+      if (userId) {
+        const profile = await getProfile(userId)
+        const subscribedOtts = profile?.subscribed_otts || []
+        
+        if (subscribedOtts.length > 0) {
+          // 구독 중인 OTT가 있는 콘텐츠를 우선순위로 정렬하거나 필터링
+          const subscribedContents = contentsWithOTT.filter((content: Content) => 
+            content.ott_providers?.some(provider => 
+              subscribedOtts.includes(String(provider.provider_id))
+            )
+          )
+          
+          // 구독 OTT 콘텐츠가 있으면 그것을 우선적으로 반환 (없으면 전체 OTT 콘텐츠 반환)
+          if (subscribedContents.length > 0) {
+            console.log(`[AI 검색] 구독 OTT 필터 적용: ${subscribedContents.length}개 발견`)
+            return subscribedContents.slice(0, 10)
+          }
+        }
+      }
+    } catch (profileError) {
+      console.warn('구독 정보 확인 중 오류 (검색은 계속 진행):', profileError)
+    }
+
+    return contentsWithOTT.slice(0, 10)
+  } catch (error) {
+    console.error('AI 텍스트 검색 실패:', error)
+    return []
   }
 }
 

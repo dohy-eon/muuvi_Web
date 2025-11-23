@@ -28,6 +28,11 @@ export default function ContentTMDB() {
       try {
         const data = await getTMDBDetail(type, id)
         if (mounted) {
+          if (!data) {
+            // TMDB에서 데이터를 찾을 수 없는 경우
+            console.error('TMDB 상세 정보를 찾을 수 없습니다:', { type, id })
+            return
+          }
           setDetail(data)
           // 기본 정보
           const g = (data as any).genres ?? []

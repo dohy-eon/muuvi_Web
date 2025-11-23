@@ -122,6 +122,42 @@ async function getTMDBId(
   }
 }
 
+// [추가] 제목과 연도로 TMDB ID 찾기 (imdb_id가 없을 때 사용)
+async function getTMDBIdByTitle(
+  title: string,
+  year: number | undefined,
+  contentType: 'movie' | 'tv' = 'movie'
+): Promise<number | null> {
+  if (!title || !TMDB_API_KEY) return null
+
+  try {
+    const endpoint = contentType === 'tv' ? 'tv' : 'movie'
+    const searchUrl = new URL(`${TMDB_BASE_URL}/search/${endpoint}`)
+    searchUrl.searchParams.set('api_key', TMDB_API_KEY)
+    searchUrl.searchParams.set('query', title)
+    searchUrl.searchParams.set('language', 'ko-KR')
+    if (year) {
+      searchUrl.searchParams.set('year', year.toString())
+    }
+
+    const response = await fetch(searchUrl.toString())
+    if (!response.ok) return null
+
+    const data = await response.json()
+    const results = data.results || []
+    
+    if (results.length > 0) {
+      // 첫 번째 결과 반환 (가장 관련성 높은 결과)
+      return results[0].id || null
+    }
+    
+    return null
+  } catch (error) {
+    console.error('제목으로 TMDB ID 가져오기 실패:', error)
+    return null
+  }
+}
+
 // TMDB API로 타입별 OTT 제공자 정보 가져오기
 async function getTypedOttProviders(
   imdbId: string | undefined,
@@ -300,18 +336,34 @@ async function getVideosAndImages(
 // TMDB API로 출연진/제작진 정보 가져오기
 async function getCastAndCrew(
   imdbId: string | undefined,
-  contentType: 'movie' | 'tv' = 'movie'
+  contentType: 'movie' | 'tv' = 'movie',
+  title?: string,
+  year?: number
 ): Promise<{
   cast: Array<{ id: number; name: string; character: string; profile_path: string | null }>
   director: string | null
   writer: string | null
 }> {
-  if (!imdbId || !TMDB_API_KEY) {
+  if (!TMDB_API_KEY) {
     return { cast: [], director: null, writer: null }
   }
 
   try {
-    const tmdbId = await getTMDBId(imdbId, contentType)
+    // [수정] imdb_id가 있으면 사용, 없으면 제목과 연도로 검색
+    let tmdbId: number | null = null
+    
+    if (imdbId) {
+      tmdbId = await getTMDBId(imdbId, contentType)
+    }
+    
+    // imdb_id로 찾지 못했거나 imdb_id가 없으면 제목으로 검색
+    if (!tmdbId && title) {
+      tmdbId = await getTMDBIdByTitle(title, year, contentType)
+      if (tmdbId) {
+        console.log(`[출연진 정보] 제목으로 TMDB ID 찾기 성공: ${title} (${year}) -> ${tmdbId}`)
+      }
+    }
+    
     if (!tmdbId) {
       return { cast: [], director: null, writer: null }
     }
@@ -330,14 +382,22 @@ async function getCastAndCrew(
     // 출연진 (최대 6명)
     const castList = (data.cast || [])
       .slice(0, 6)
-      .map((actor: any) => ({
-        id: actor.id,
-        name: actor.name || '',
-        character: actor.character || actor.roles?.[0]?.character || '',
-        profile_path: actor.profile_path
-          ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
-          : null,
-      }))
+      .map((actor: any) => {
+        // character가 "Self"이거나 비어있으면 빈 문자열로 처리 (UI에서 기본 텍스트 표시)
+        const character = actor.character || actor.roles?.[0]?.character || ''
+        const normalizedCharacter = (character.trim().toLowerCase() === 'self' || !character.trim()) 
+          ? '' 
+          : character
+        
+        return {
+          id: actor.id,
+          name: actor.name || '',
+          character: normalizedCharacter,
+          profile_path: actor.profile_path
+            ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
+            : null,
+        }
+      })
 
     // 감독 찾기
     let directorName: string | null = null
@@ -584,16 +644,45 @@ export default function Content() {
           const [typedProviders, ratingAndRuntime, castAndCrew, videosAndImages] = await Promise.all([
             getTypedOttProviders(data.imdb_id, contentType),
             getContentRatingAndRuntime(data.imdb_id, contentType),
-            getCastAndCrew(data.imdb_id, contentType),
+            getCastAndCrew(data.imdb_id, contentType, data.title, data.year), // [수정] 제목과 연도 전달
             getVideosAndImages(data.imdb_id, contentType)
           ])
-          setOttProviders(typedProviders)
+          
+          // [수정] OTT 정보: TMDB 결과가 없으면 Supabase에 저장된 ott_providers 사용
+          if (typedProviders.length > 0) {
+            setOttProviders(typedProviders)
+          } else if (data.ott_providers && data.ott_providers.length > 0) {
+            // Supabase에 저장된 OTT 정보를 사용 (type이 없을 수 있으므로 기본값 설정)
+            const fallbackProviders: OTTProvider[] = data.ott_providers.map(provider => ({
+              ...provider,
+              type: provider.type || 'flatrate' // 기본값: 정액제
+            }))
+            setOttProviders(fallbackProviders)
+            console.log('[OTT 정보] Supabase 저장 데이터 사용:', fallbackProviders.length, '개')
+          } else {
+            setOttProviders([])
+          }
+          
           setAgeRating(ratingAndRuntime.rating)
           setRuntime(ratingAndRuntime.runtime)
           setCast(castAndCrew.cast)
           setDirector(castAndCrew.director)
           setWriter(castAndCrew.writer)
-          setMediaItems(videosAndImages)
+          
+          // [수정] 포스터 콜라주: TMDB 결과가 없으면 Supabase 포스터를 사용
+          if (videosAndImages.length > 0) {
+            setMediaItems(videosAndImages)
+          } else if (data.poster_url) {
+            // 포스터를 콜라주로 표시
+            setMediaItems([{
+              type: 'image' as const,
+              url: data.poster_url,
+              thumbnail: data.poster_url
+            }])
+            console.log('[포스터 콜라주] Supabase 포스터 사용')
+          } else {
+            setMediaItems([])
+          }
         }
       } catch (err) {
         console.error('콘텐츠 로드 실패:', err)
@@ -858,19 +947,19 @@ export default function Content() {
         {/* 포스터 위 정보 오버레이 */}
         <div className="absolute inset-0 flex flex-col justify-end pb-4 px-5">
           {/* 제목 */}
-          <h1 className="text-[20px] font-bold text-white mb-1 text-center">
+          <h1 className="text-[20px] font-bold text-white mb-1 text-center pr-[100px] line-clamp-2 break-words">
             {/* [수정] 언어에 따른 제목 선택 */}
             {(language === 'en' && content.title_en) ? content.title_en : content.title}
           </h1>
           
           {/* 장르 • 연도 */}
-          <p className="text-[14px] font-normal text-white text-center mb-4">
+          <p className="text-[14px] font-normal text-white text-center mb-4 pr-[100px]">
             {/* [수정] 언어에 따른 장르 선택 */}
             {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || (language === 'en' ? 'Movie' : '영화'))} • {content.year || ''}
           </p>
           
           {/* OTT 아이콘 및 장르 태그 */}
-          <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="flex items-center justify-center gap-2 mb-2 pr-[100px] flex-wrap">
             {/* OTT 제공자 아이콘 (작은 원형) */}
             {(selectedFilter ? filteredOttProviders : ottProviders).slice(0, 2).map((provider, index) => (
               <div
