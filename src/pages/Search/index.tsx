@@ -78,27 +78,55 @@ export default function Search() {
     []
   )
 
-  const handleSubmit = (q?: string) => {
+  // [추가] 공통 AI 검색 함수 (검색어 -> 임베딩 -> 추천 결과 변환)
+  const searchWithAI = async (text: string): Promise<SearchResult[]> => {
+    try {
+      const data = await getRecommendationsByText(text)
+      
+      // Content 타입을 UI용 SearchResult 타입으로 변환
+      return data.map(item => ({
+        id: item.id,
+        title: item.title,
+        year: item.year?.toString(),
+        posterUrl: item.poster_url,
+        mediaType: (item.genre === '영화' ? 'movie' : 'tv') as 'movie' | 'tv'
+      }))
+    } catch (e) {
+      console.error('AI 검색 중 오류:', e)
+      return []
+    }
+  }
+
+  // [수정] 텍스트 검색 핸들러 (하이브리드 방식 적용)
+  const handleSubmit = async (q?: string) => {
     const value = (q ?? query).trim()
     if (!value) return
+    
     setIsSearching(true)
-    // 최근 검색어 업데이트
+    // 최근 검색어 저장
     setRecent((prev) => {
       const next = [value, ...prev.filter((v) => v !== value)]
       return next.slice(0, 10)
     })
     setResults([])
-    ;(async () => {
-      try {
-        const data = await searchTMDB(value)
-        setResults(data)
-      } catch (e) {
-        console.error('TMDB 검색 실패:', e)
-        setResults([])
-      } finally {
-        setIsSearching(false)
+
+    try {
+      // 1. 우선 TMDB에서 '제목'으로 검색해봅니다.
+      let data = await searchTMDB(value)
+      
+      // 2. 제목 검색 결과가 하나도 없다면? -> AI에게 물어봅니다.
+      if (data.length === 0) {
+        console.log('제목 검색 결과 없음, AI 추천으로 전환:', value)
+        data = await searchWithAI(value)
       }
-    })()
+      
+      setResults(data)
+    } catch (e) {
+      console.error('검색 실패:', e)
+      setResults([])
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   // [추가] 음성 인식 시작 핸들러
@@ -161,7 +189,7 @@ export default function Search() {
     }
   }
 
-  // [추가] 음성 검색 제출 (AI 임베딩 검색)
+  // [수정] 음성 검색 핸들러 (로직 재사용)
   const handleVoiceSubmit = async (text: string) => {
     if (!text.trim()) return
     
@@ -169,19 +197,10 @@ export default function Search() {
     setResults([])
     
     try {
-      // 텍스트 검색이 아닌 '의미 기반 AI 검색' 실행
-      const data = await getRecommendationsByText(text)
-      
-      // 결과 형식 맞추기 (Content -> SearchResult)
-      const formattedResults = data.map(item => ({
-        id: item.id, // UUID
-        title: item.title,
-        year: item.year?.toString(),
-        posterUrl: item.poster_url,
-        mediaType: (item.genre === '영화' ? 'movie' : 'tv') as 'movie' | 'tv' 
-      }))
-      
-      setResults(formattedResults)
+      // 음성 입력은 사용자가 '문장'으로 말할 확률이 높으므로 바로 AI 검색을 수행합니다.
+      // (필요하다면 여기도 TMDB 검색을 먼저 하도록 통일할 수 있습니다)
+      const data = await searchWithAI(text)
+      setResults(data)
       
       // 최근 검색어 업데이트
       setRecent((prev) => {
