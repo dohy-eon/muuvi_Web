@@ -933,6 +933,32 @@ export default function Main() {
       </div>
       </div>
 
+      {/* [추가] 유니버스 진입 버튼 (우측 하단 플로팅) */}
+      {/* Selection Info Card가 있을 때는 더 위로 배치하여 겹침 방지 */}
+      <button
+        onClick={() => navigate('/universe')}
+        className={`fixed right-5 z-40 w-14 h-14 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 ${
+          (displayGenre || moodNames) ? 'bottom-36' : 'bottom-20'
+        }`}
+        aria-label="Go to Universe"
+      >
+        {/* 행성 아이콘 */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+          className="w-8 h-8"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12.75 15l3-3m0 0l-3-3m3 3h-7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      </button>
+
       {/* Absolute 하단 네비게이션 (오버레이) */}
       <div className="absolute bottom-0 left-0 right-0 z-30 pt-4 pb-2 pointer-events-none">
         <div className="pointer-events-auto">
