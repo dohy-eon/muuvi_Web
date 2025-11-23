@@ -413,10 +413,17 @@ export default function Search() {
           {/* 결과 리스트 */}
           {!isSearching && !!results.length && (
             <div className="mt-2 space-y-4">
-              {results.map((item) => (
+              {results.map((item) => {
+                // UUID 형식인지 확인 (하이픈 포함 = Supabase 콘텐츠, 숫자만 = TMDB)
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)
+                const contentPath = isUUID 
+                  ? `/content/${item.id}` // Supabase 콘텐츠 상세 페이지
+                  : `/content/tmdb/${item.mediaType}/${item.id}` // TMDB 상세 페이지
+                
+                return (
                 <button
                   key={item.id}
-                  onClick={() => navigate(`/content/tmdb/${item.mediaType}/${item.id}`)}
+                  onClick={() => navigate(contentPath)}
                   className="w-full flex gap-3"
                 >
                   <div className="w-20 h-28 rounded-[8px] bg-[#e7e9ec] overflow-hidden">
@@ -438,7 +445,8 @@ export default function Search() {
                     <p className="text-[12px] text-[#6b7280] mt-1">{item.year ?? ''}</p>
                   </div>
                 </button>
-              ))}
+                )
+              })}
             </div>
           )}
 
