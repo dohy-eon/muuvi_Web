@@ -72,10 +72,13 @@ export default function Search() {
 
   const trending = useMemo(
     () => {
-      // 인기 검색어는 언어별로 다르게 설정 가능하지만, 현재는 한국어 콘텐츠명 그대로 사용
+      // 인기 검색어는 언어별로 다르게 설정
+      if (language === 'en') {
+        return ['The Office', 'Breaking Bad', 'Stranger Things', 'Wicked', 'The Crown']
+      }
       return ['태풍상사', '피지컬: 아시아', '환승연애', '위키드', '제4차 사랑혁명']
     },
-    []
+    [language]
   )
 
   // [추가] 공통 AI 검색 함수 (검색어 -> 임베딩 -> 추천 결과 변환)
@@ -112,7 +115,7 @@ export default function Search() {
 
     try {
       // 1. 우선 TMDB에서 '제목'으로 검색해봅니다.
-      let data = await searchTMDB(value)
+      let data = await searchTMDB(value, language)
       
       // 2. 제목 검색 결과가 하나도 없다면? -> AI에게 물어봅니다.
       if (data.length === 0) {
@@ -144,13 +147,15 @@ export default function Search() {
       const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition
       
       if (!SpeechRecognitionAPI) {
-        alert('이 브라우저는 음성 인식을 지원하지 않습니다. Chrome을 사용해주세요.')
+        alert(language === 'en' 
+          ? 'This browser does not support speech recognition. Please use Chrome.'
+          : '이 브라우저는 음성 인식을 지원하지 않습니다. Chrome을 사용해주세요.')
         setIsListening(false)
         return
       }
 
       const recognitionInstance = new SpeechRecognitionAPI()
-      recognitionInstance.lang = 'ko-KR' // 한국어 설정
+      recognitionInstance.lang = language === 'en' ? 'en-US' : 'ko-KR'
       recognitionInstance.continuous = false
       recognitionInstance.interimResults = true // 말하는 도중 결과 보기
 
@@ -175,7 +180,7 @@ export default function Search() {
     } catch (error) {
       console.error('마이크 접근 실패:', error)
       setIsListening(false)
-      alert('마이크 권한이 필요합니다.')
+      alert(language === 'en' ? 'Microphone permission is required.' : '마이크 권한이 필요합니다.')
     }
   }
 
@@ -308,9 +313,14 @@ export default function Search() {
           <div className="w-[320px] bg-white rounded-[24px] p-6 flex flex-col items-center shadow-2xl">
             
             {/* 1. 타이틀 */}
-            <h3 className="text-[#2e2c6a] text-lg font-bold mb-2">듣고 있어요... 👂</h3>
+            <h3 className="text-[#2e2c6a] text-lg font-bold mb-2">
+              {language === 'en' ? 'Listening... 👂' : '듣고 있어요... 👂'}
+            </h3>
             <p className="text-gray-500 text-sm mb-6 text-center">
-              "우울할 때 볼만한 영화 추천해줘"<br/>라고 말해보세요.
+              {language === 'en' 
+                ? <>Say something like<br/>"Recommend a movie for when I'm sad"</>
+                : <>"우울할 때 볼만한 영화 추천해줘"<br/>라고 말해보세요.</>
+              }
             </p>
 
             {/* 2. 비주얼라이저 (오디오 파형) */}
@@ -323,7 +333,9 @@ export default function Search() {
                   "{query}"
                 </p>
               ) : (
-                <p className="text-gray-400 text-sm">말씀하시면 텍스트가 표시됩니다</p>
+                <p className="text-gray-400 text-sm">
+                  {language === 'en' ? 'Start speaking and text will appear' : '말씀하시면 텍스트가 표시됩니다'}
+                </p>
               )}
             </div>
 

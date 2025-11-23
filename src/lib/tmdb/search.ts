@@ -25,17 +25,19 @@ function buildImageUrl(path?: string | null, size: 'w154' | 'w185' | 'w342' | 'w
   return `${IMG_BASE}/${size}${path}`
 }
 
-export async function searchTMDB(query: string): Promise<NormalizedSearchResult[]> {
+export async function searchTMDB(query: string, language: 'ko' | 'en' = 'ko'): Promise<NormalizedSearchResult[]> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) {
     console.warn('VITE_TMDB_API_KEY가 설정되어 있지 않습니다.')
     return []
   }
 
+  const langParam = language === 'en' ? 'en-US' : 'ko-KR'
+
   const url = new URL(`${TMDB_BASE}/search/multi`)
   url.searchParams.set('query', query)
   url.searchParams.set('include_adult', 'false')
-  url.searchParams.set('language', 'ko-KR')
+  url.searchParams.set('language', langParam)
   url.searchParams.set('page', '1')
 
   const res = await fetch(url.toString(), {
@@ -51,7 +53,7 @@ export async function searchTMDB(query: string): Promise<NormalizedSearchResult[
     urlWithKey.searchParams.set('api_key', apiKey)
     urlWithKey.searchParams.set('query', query)
     urlWithKey.searchParams.set('include_adult', 'false')
-    urlWithKey.searchParams.set('language', 'ko-KR')
+    urlWithKey.searchParams.set('language', langParam)
     urlWithKey.searchParams.set('page', '1')
     const res2 = await fetch(urlWithKey.toString())
     const json2 = await res2.json()
@@ -104,16 +106,18 @@ export type TMDBDetail =
 
 export async function getTMDBDetail(
   type: 'movie' | 'tv',
-  id: string
+  id: string,
+  language: 'ko' | 'en' = 'ko'
 ): Promise<TMDBDetail | null> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) {
     console.warn('VITE_TMDB_API_KEY가 설정되어 있지 않습니다.')
     return null
   }
+  const langParam = language === 'en' ? 'en-US' : 'ko-KR'
   const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`
   const url = new URL(`${TMDB_BASE}${path}`)
-  url.searchParams.set('language', 'ko-KR')
+  url.searchParams.set('language', langParam)
   url.searchParams.set('append_to_response', 'credits,release_dates,content_ratings')
 
   const res = await fetch(url.toString(), {
@@ -125,7 +129,7 @@ export async function getTMDBDetail(
   if (res.status === 401) {
     const urlWithKey = new URL(`${TMDB_BASE}${path}`)
     urlWithKey.searchParams.set('api_key', apiKey)
-    urlWithKey.searchParams.set('language', 'ko-KR')
+    urlWithKey.searchParams.set('language', langParam)
     urlWithKey.searchParams.set('append_to_response', 'credits,release_dates,content_ratings')
     const res2 = await fetch(urlWithKey.toString())
     if (!res2.ok) return null
@@ -159,7 +163,12 @@ function normalizeDetail(type: 'movie' | 'tv', data: any): TMDBDetail {
       backdrop_path: data.backdrop_path,
       runtime: data.runtime,
       genres: data.genres,
-    }
+      // append_to_response로 받은 데이터 포함
+      credits: data.credits,
+      release_dates: data.release_dates,
+      content_ratings: data.content_ratings,
+      created_by: data.created_by,
+    } as any
   }
   return {
     mediaType: 'tv',
@@ -171,7 +180,12 @@ function normalizeDetail(type: 'movie' | 'tv', data: any): TMDBDetail {
     backdrop_path: data.backdrop_path,
     episode_run_time: data.episode_run_time,
     genres: data.genres,
-  }
+    // append_to_response로 받은 데이터 포함
+    credits: data.credits,
+    release_dates: data.release_dates,
+    content_ratings: data.content_ratings,
+    created_by: data.created_by,
+  } as any
 }
 
 

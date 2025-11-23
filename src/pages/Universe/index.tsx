@@ -4,7 +4,9 @@ import { OrbitControls, Stars, Billboard, Text } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useNavigate } from 'react-router-dom'
+import { useRecoilValue } from 'recoil'
 import { supabase } from '../../lib/supabase'
+import { languageState } from '../../recoil/userState'
 import type { Content } from '../../types'
 import RecommendationCard from '../../components/RecommendationCard'
 
@@ -159,8 +161,22 @@ function CameraController({ target }: { target: [number, number, number] | null 
   )
 }
 
+// UI 텍스트 번역
+const UNIVERSE_TEXT = {
+  ko: {
+    title: 'My Muuvi Universe',
+    subtitle: '당신의 취향이 별이 되어 빛나는 곳',
+  },
+  en: {
+    title: 'My Muuvi Universe',
+    subtitle: 'Where your preferences shine as stars',
+  },
+}
+
 export default function Universe() {
   const navigate = useNavigate()
+  const language = useRecoilValue(languageState)
+  const t = UNIVERSE_TEXT[language]
   const [contents, setContents] = useState<Content[]>([])
   const [selectedContent, setSelectedContent] = useState<Content | null>(null)
   const [targetPosition, setTargetPosition] = useState<[number, number, number] | null>(null)
@@ -221,11 +237,11 @@ export default function Universe() {
     setTargetPosition(null)
   }
 
-  // 주요 장르만 필터링 (한글 우선, 중복 제거)
+  // 주요 장르만 필터링 (언어별 우선, 중복 제거)
   const mainGenres = useMemo(() => {
     const mainGenreList: string[] = []
     
-    // 한글 장르 우선, 영문은 중복 제거
+    // 언어별 장르 우선, 중복 제거
     const genreKeys = Object.keys(GENRE_CLUSTERS).filter((g) => g !== 'default')
     const seenCoords = new Set<string>()
     
@@ -233,17 +249,27 @@ export default function Universe() {
       const coords = JSON.stringify(GENRE_CLUSTERS[genre])
       if (!seenCoords.has(coords)) {
         seenCoords.add(coords)
-        // 한글 장르 우선 선택
-        if (/[가-힣]/.test(genre)) {
-          mainGenreList.push(genre)
-        } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && /[가-힣]/.test(g))) {
-          mainGenreList.push(genre)
+        // 언어에 따라 한글 또는 영문 장르 우선 선택
+        if (language === 'ko') {
+          // 한글 장르 우선
+          if (/[가-힣]/.test(genre)) {
+            mainGenreList.push(genre)
+          } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && /[가-힣]/.test(g))) {
+            mainGenreList.push(genre)
+          }
+        } else {
+          // 영문 장르 우선
+          if (!/[가-힣]/.test(genre)) {
+            mainGenreList.push(genre)
+          } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && !/[가-힣]/.test(g))) {
+            mainGenreList.push(genre)
+          }
         }
       }
     }
     
     return mainGenreList.slice(0, 8) // 최대 8개만 표시
-  }, [])
+  }, [language])
 
   return (
     <div className="w-full h-screen bg-black relative overflow-hidden font-pretendard">
@@ -302,8 +328,8 @@ export default function Universe() {
           <div className="flex items-start justify-between mb-4">
             {/* 타이틀 */}
             <div className="pointer-events-none">
-              <h1 className="text-white text-2xl font-bold drop-shadow-lg mb-1">My Muuvi Universe</h1>
-              <p className="text-white/60 text-xs">당신의 취향이 별이 되어 빛나는 곳</p>
+              <h1 className="text-white text-2xl font-bold drop-shadow-lg mb-1">{t.title}</h1>
+              <p className="text-white/60 text-xs">{t.subtitle}</p>
             </div>
 
             {/* 뒤로가기 버튼 */}
