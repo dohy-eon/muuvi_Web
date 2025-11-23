@@ -115,7 +115,7 @@ function MovieStar({
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isSelected || hovered ? 2 : 0.5}
+          emissiveIntensity={isSelected || hovered ? 3 : 0.8}
           toneMapped={false}
         />
       </mesh>
@@ -260,9 +260,9 @@ export default function Universe() {
         {/* 별들의 emissive(발광) 속성과 반응하여 빛나게 만듭니다 */}
         <EffectComposer>
           <Bloom
-            luminanceThreshold={0.1} // 이 밝기 이상인 픽셀만 빛나게 함 (0~1)
+            luminanceThreshold={0.08} // 이 밝기 이상인 픽셀만 빛나게 함 (0~1)
             luminanceSmoothing={0.9} // 경계를 부드럽게 처리
-            intensity={3.0} // 빛 번짐 강도 (높을수록 강렬함)
+            intensity={4.5} // 빛 번짐 강도 (높을수록 강렬함)
             mipmapBlur={true} // 고퀄리티 블러 효과 사용
           />
         </EffectComposer>
