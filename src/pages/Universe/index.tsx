@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Billboard, Text } from '@react-three/drei'
+import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -114,7 +115,7 @@ function MovieStar({
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isSelected || hovered ? 2 : 0.5}
+          emissiveIntensity={isSelected || hovered ? 3 : 0.8}
           toneMapped={false}
         />
       </mesh>
@@ -220,6 +221,30 @@ export default function Universe() {
     setTargetPosition(null)
   }
 
+  // 주요 장르만 필터링 (한글 우선, 중복 제거)
+  const mainGenres = useMemo(() => {
+    const mainGenreList: string[] = []
+    
+    // 한글 장르 우선, 영문은 중복 제거
+    const genreKeys = Object.keys(GENRE_CLUSTERS).filter((g) => g !== 'default')
+    const seenCoords = new Set<string>()
+    
+    for (const genre of genreKeys) {
+      const coords = JSON.stringify(GENRE_CLUSTERS[genre])
+      if (!seenCoords.has(coords)) {
+        seenCoords.add(coords)
+        // 한글 장르 우선 선택
+        if (/[가-힣]/.test(genre)) {
+          mainGenreList.push(genre)
+        } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && /[가-힣]/.test(g))) {
+          mainGenreList.push(genre)
+        }
+      }
+    }
+    
+    return mainGenreList.slice(0, 8) // 최대 8개만 표시
+  }, [])
+
   return (
     <div className="w-full h-screen bg-black relative overflow-hidden font-pretendard">
       {/* 3D Canvas */}
@@ -230,6 +255,17 @@ export default function Universe() {
         {/* 조명 */}
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />
+
+        {/* 빛번짐 효과 (Bloom) */}
+        {/* 별들의 emissive(발광) 속성과 반응하여 빛나게 만듭니다 */}
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.08} // 이 밝기 이상인 픽셀만 빛나게 함 (0~1)
+            luminanceSmoothing={0.9} // 경계를 부드럽게 처리
+            intensity={4.5} // 빛 번짐 강도 (높을수록 강렬함)
+            mipmapBlur={true} // 고퀄리티 블러 효과 사용
+          />
+        </EffectComposer>
 
         {/* 영화 별들 */}
         {stars.map((star) => (
@@ -256,28 +292,73 @@ export default function Universe() {
         </mesh>
       </Canvas>
 
-      {/* UI Overlay: 타이틀 */}
-      <div className="absolute top-5 left-5 z-10 pointer-events-none">
-        <h1 className="text-white text-2xl font-bold drop-shadow-lg">My Muuvi Universe</h1>
-        <p className="text-white/70 text-sm">당신의 취향이 별이 되어 빛나는 곳</p>
-      </div>
+      {/* UI Overlay: 상단 헤더 */}
+      <div className="absolute top-0 left-0 right-0 z-10">
+        {/* 그라데이션 배경 */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none" />
+        
+        <div className="relative px-6 py-4">
+          {/* 상단 좌우 영역 */}
+          <div className="flex items-start justify-between mb-4">
+            {/* 타이틀 */}
+            <div className="pointer-events-none">
+              <h1 className="text-white text-2xl font-bold drop-shadow-lg mb-1">My Muuvi Universe</h1>
+              <p className="text-white/60 text-xs">당신의 취향이 별이 되어 빛나는 곳</p>
+            </div>
 
-      {/* UI Overlay: 뒤로가기 버튼 */}
-      <button
-        onClick={() => navigate('/main')}
-        className="absolute top-5 right-5 z-10 w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-          className="w-6 h-6"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+            {/* 뒤로가기 버튼 */}
+            <button
+              onClick={() => navigate('/main')}
+              className="w-9 h-9 bg-white/5 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-white/15 transition-all duration-300 border border-white/10 hover:border-white/30 hover:scale-110"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 장르별 워프 버튼 - 카테고리 스타일 */}
+          <div className="flex flex-wrap gap-2 justify-start">
+            {mainGenres.map((genre, index) => (
+              <button
+                key={genre}
+                onClick={() => {
+                  setSelectedContent(null)
+                  setTargetPosition(GENRE_CLUSTERS[genre] as [number, number, number])
+                }}
+                className="group relative px-4 py-2 bg-gradient-to-r from-white/5 to-white/10 backdrop-blur-xl rounded-full text-white text-sm font-medium hover:from-white/15 hover:to-white/20 transition-all duration-300 border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-lg overflow-hidden"
+                style={{ 
+                  animationDelay: `${index * 50}ms`,
+                }}
+              >
+                {/* 장르 색상 그라데이션 배경 (호버 시) */}
+                <div 
+                  className="absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-300 rounded-full"
+                  style={{
+                    background: `linear-gradient(135deg, ${GENRE_COLORS[genre] || '#ffffff'}40, ${GENRE_COLORS[genre] || '#ffffff'}20)`
+                  }}
+                />
+                {/* 장르 색상 포인트 */}
+                <div 
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                  style={{ 
+                    backgroundColor: GENRE_COLORS[genre] || '#ffffff',
+                    boxShadow: `0 0 8px ${GENRE_COLORS[genre] || '#ffffff'}80`
+                  }}
+                />
+                <span className="relative pl-3">{genre}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* UI Overlay: 선택된 영화 상세 카드 (하단 팝업) */}
       {selectedContent && (
