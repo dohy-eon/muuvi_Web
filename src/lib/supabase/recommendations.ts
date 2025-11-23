@@ -325,3 +325,43 @@ export async function syncImdbContent(imdbId: string): Promise<Content | null> {
   }
 }
 
+/**
+ * [추가] 텍스트(음성) 기반 AI 추천
+ * 사용자의 발화 내용을 임베딩하여 유사한 콘텐츠를 찾습니다.
+ */
+export async function getRecommendationsByText(queryText: string): Promise<Content[]> {
+  try {
+    console.log(`[보이스 추천 시도] "${queryText}"`)
+
+    // 1. 텍스트를 벡터로 변환 (기존 embed Edge Function 재사용)
+    const { data: embedData, error: embedError } = await supabase.functions.invoke(
+      'embed',
+      { body: { text: queryText } }
+    )
+
+    if (embedError) throw embedError
+
+    const query_vector = embedData.vector
+
+    // 2. 벡터 검색 (match_contents RPC 재사용)
+    const { data, error } = await supabase.rpc('match_contents', {
+      query_vector: query_vector,
+      match_count: 20, // 충분한 후보군 확보
+      p_genre: null,   // 장르 제한 없음
+      p_mood_tags: []  // 무드 태그 제한 없음
+    })
+
+    if (error) throw error
+
+    // 3. OTT 정보가 있는 것만 필터링
+    const contentsWithOTT = (data || []).filter(
+      (content: Content) => content.ott_providers && content.ott_providers.length > 0
+    )
+
+    return contentsWithOTT
+  } catch (error) {
+    console.error('보이스 추천 실패:', error)
+    return []
+  }
+}
+
