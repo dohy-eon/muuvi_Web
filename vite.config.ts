@@ -11,6 +11,7 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'recoil-vendor': ['recoil'],
           'supabase-vendor': ['@supabase/supabase-js'],
+          'three-vendor': ['three', '@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
         },
       },
     },
