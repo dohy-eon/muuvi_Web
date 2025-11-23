@@ -947,19 +947,19 @@ export default function Content() {
         {/* 포스터 위 정보 오버레이 */}
         <div className="absolute inset-0 flex flex-col justify-end pb-4 px-5">
           {/* 제목 */}
-          <h1 className="text-[20px] font-bold text-white mb-1 text-center">
+          <h1 className="text-[20px] font-bold text-white mb-1 text-center pr-[100px] line-clamp-2 break-words">
             {/* [수정] 언어에 따른 제목 선택 */}
             {(language === 'en' && content.title_en) ? content.title_en : content.title}
           </h1>
           
           {/* 장르 • 연도 */}
-          <p className="text-[14px] font-normal text-white text-center mb-4">
+          <p className="text-[14px] font-normal text-white text-center mb-4 pr-[100px]">
             {/* [수정] 언어에 따른 장르 선택 */}
             {(language === 'en' && content.genre_en) ? content.genre_en : (content.genre || (language === 'en' ? 'Movie' : '영화'))} • {content.year || ''}
           </p>
           
           {/* OTT 아이콘 및 장르 태그 */}
-          <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="flex items-center justify-center gap-2 mb-2 pr-[100px] flex-wrap">
             {/* OTT 제공자 아이콘 (작은 원형) */}
             {(selectedFilter ? filteredOttProviders : ottProviders).slice(0, 2).map((provider, index) => (
               <div
