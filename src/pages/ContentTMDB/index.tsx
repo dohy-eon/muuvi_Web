@@ -1,10 +1,82 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useRecoilValue } from 'recoil'
 import BottomNavigation from '../../components/BottomNavigation'
+import { languageState } from '../../recoil/userState'
 import { buildPosterUrl, getTMDBDetail, TMDBDetail } from '../../lib/tmdb/search'
+
+// UI 텍스트 번역
+const CONTENT_TMDB_TEXT = {
+  ko: {
+    back: '뒤로가기',
+    originalTitle: '원제',
+    genre: '장르',
+    releaseDate: '개봉일',
+    ageRating: '연령등급',
+    runtime: '러닝타임',
+    watch: '보러가기',
+    flatrate: '정액제',
+    free: '무료',
+    rent: '대여',
+    buy: '구매',
+    cast: '출연진/제작진',
+    director: '감독',
+    writer: '극본',
+    castRole: '출연',
+    moreCast: '출연진/제작진 더보기',
+    media: '영상 및 포스터 콜라주',
+    video: '비디오',
+    poster: '포스터',
+    noPlatform: '시청 가능한 플랫폼이 없습니다.',
+    noPlatformFiltered: '해당 타입으로 시청 가능한 플랫폼이 없습니다.',
+    noCast: '출연진 정보가 없습니다.',
+    noCrew: '제작진 정보가 없습니다.',
+    noMedia: '영상 및 포스터 정보가 없습니다.',
+    detail: '상세',
+    movie: '영화',
+    tv: 'TV',
+    hour: '시간',
+    minute: '분',
+    year: '년',
+  },
+  en: {
+    back: 'Go Back',
+    originalTitle: 'Original Title',
+    genre: 'Genre',
+    releaseDate: 'Release Date',
+    ageRating: 'Age Rating',
+    runtime: 'Runtime',
+    watch: 'Where to Watch',
+    flatrate: 'Subscription',
+    free: 'Free',
+    rent: 'Rent',
+    buy: 'Buy',
+    cast: 'Cast & Crew',
+    director: 'Director',
+    writer: 'Writer',
+    castRole: 'Cast',
+    moreCast: 'View More Cast & Crew',
+    media: 'Videos & Posters',
+    video: 'Video',
+    poster: 'Poster',
+    noPlatform: 'No streaming platforms available.',
+    noPlatformFiltered: 'No streaming platforms available for this type.',
+    noCast: 'No cast information available.',
+    noCrew: 'No crew information available.',
+    noMedia: 'No videos or posters available.',
+    detail: 'Detail',
+    movie: 'Movie',
+    tv: 'TV',
+    hour: 'h',
+    minute: 'm',
+    year: '',
+  },
+}
 
 export default function ContentTMDB() {
   const navigate = useNavigate()
+  const language = useRecoilValue(languageState)
+  const t = CONTENT_TMDB_TEXT[language]
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>()
   const [detail, setDetail] = useState<TMDBDetail | null>(null)
   // no explicit loading UI; we still fetch but render progressively
@@ -26,7 +98,7 @@ export default function ContentTMDB() {
     ;(async () => {
       if (!type || !id) return
       try {
-        const data = await getTMDBDetail(type, id)
+        const data = await getTMDBDetail(type, id, language)
         if (mounted) {
           if (!data) {
             // TMDB에서 데이터를 찾을 수 없는 경우
@@ -47,7 +119,7 @@ export default function ContentTMDB() {
             if (rt) {
               const h = Math.floor(rt / 60)
               const m = rt % 60
-              setRuntime(h > 0 ? `${h}시간 ${m}분` : `${m}분`)
+              setRuntime(h > 0 ? `${h}${t.hour} ${m}${t.minute}` : `${m}${t.minute}`)
             } else {
               setRuntime(null)
             }
@@ -67,7 +139,7 @@ export default function ContentTMDB() {
             if (epi) {
               const h = Math.floor(epi / 60)
               const m = epi % 60
-              setRuntime(h > 0 ? `${h}시간 ${m}분` : `${m}분`)
+              setRuntime(h > 0 ? `${h}${t.hour} ${m}${t.minute}` : `${m}${t.minute}`)
             } else {
               setRuntime(null)
             }
@@ -75,7 +147,7 @@ export default function ContentTMDB() {
 
           // 출연/제작
           const credits = (data as any).credits
-          if (credits) {
+          if (credits && (credits.cast || credits.crew)) {
             const castList = (credits.cast || []).slice(0, 6).map((actor: any) => ({
               id: actor.id,
               name: actor.name || '',
@@ -109,10 +181,45 @@ export default function ContentTMDB() {
             } else {
               setWriter(writerCandidate?.name ?? null)
             }
+          } else {
+            // credits가 없거나 비어있을 경우 별도로 fetch 시도
+            fetchCredits(type, id).then((creditsData) => {
+              if (mounted && creditsData) {
+                const castList = (creditsData.cast || []).slice(0, 6).map((actor: any) => ({
+                  id: actor.id,
+                  name: actor.name || '',
+                  character: actor.character || actor.roles?.[0]?.character || '',
+                  profile_path: actor.profile_path
+                    ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
+                    : null,
+                }))
+                setCast(castList)
+                const crew: any[] = creditsData.crew || []
+                const directorCandidate =
+                  crew.find((p) => p.job === 'Director') ||
+                  crew.find((p) => p.department === 'Directing') ||
+                  (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
+                setDirector(directorCandidate?.name ?? null)
+                let writerCandidate =
+                  crew.find((p) => p.job === 'Writer') ||
+                  crew.find((p) => p.job === 'Screenplay') ||
+                  crew.find((p) => p.job === 'Story') ||
+                  crew.find((p) => p.job === 'Novel') ||
+                  (type === 'tv' ? crew.find((p) => p.job === 'Creator') : undefined)
+                if (!writerCandidate && type === 'tv') {
+                  // created_by는 별도로 가져와야 할 수도 있음
+                  setWriter(null)
+                } else {
+                  setWriter(writerCandidate?.name ?? null)
+                }
+              }
+            }).catch((err) => {
+              console.warn('Credits fetch 실패:', err)
+            })
           }
 
           // 이미지/비디오
-          fetchMedia(type, id).then((items) => mounted && setMediaItems(items))
+          fetchMedia(type, id, language).then((items) => mounted && setMediaItems(items))
           // OTT 제공자
           fetchOttProviders(type, id).then((providers) => mounted && setOttProviders(providers))
         }
@@ -122,10 +229,10 @@ export default function ContentTMDB() {
     return () => {
       mounted = false
     }
-  }, [type, id])
+  }, [type, id, language, t])
 
   const title =
-    (detail && ('title' in detail ? detail.title : detail.name)) || '상세'
+    (detail && ('title' in detail ? detail.title : detail.name)) || t.detail
   const year = (() => {
     if (!detail) return ''
     if ('release_date' in detail) return detail.release_date?.slice(0, 4) || ''
@@ -185,7 +292,7 @@ export default function ContentTMDB() {
         <button
           onClick={() => navigate(-1)}
           className="absolute top-[20px] left-5 z-20 w-6 h-6 flex items-center justify-center"
-          aria-label="뒤로가기"
+          aria-label={t.back}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -220,7 +327,7 @@ export default function ContentTMDB() {
             </h1>
             {/* 장르 • 연도 */}
             <p className="text-[14px] font-normal text-white text-center mb-4">
-              {(type === 'movie' ? '영화' : 'TV') } • {year}
+              {(type === 'movie' ? t.movie : t.tv) } • {year}
             </p>
             {/* OTT 아이콘 및 장르 태그 */}
             <div className="flex items-center justify-center gap-2 mb-2">
@@ -284,35 +391,35 @@ export default function ContentTMDB() {
           <div className="space-y-[15px]">
             {/* 원제 */}
             <div className="flex items-start">
-              <p className="text-[14px] font-normal text-gray-700 w-[93px]">원제</p>
+              <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.originalTitle}</p>
               <p className="text-[14px] font-normal text-gray-900 flex-1">
                 {title || '-'}
               </p>
             </div>
             {/* 장르 */}
             <div className="flex items-start">
-              <p className="text-[14px] font-normal text-gray-700 w-[93px]">장르</p>
+              <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.genre}</p>
               <p className="text-[14px] font-normal text-gray-900 flex-1">
                 {genres.map((g) => g.name).join(', ') || '-'}
               </p>
             </div>
             {/* 개봉일 */}
             <div className="flex items-start">
-              <p className="text-[14px] font-normal text-gray-700 w-[93px]">개봉일</p>
+              <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.releaseDate}</p>
               <p className="text-[14px] font-normal text-gray-900 flex-1">
-                {year ? `${year}년` : '-'}
+                {year ? `${year}${t.year}` : '-'}
               </p>
             </div>
             {/* 연령등급 */}
             <div className="flex items-start">
-              <p className="text-[14px] font-normal text-gray-700 w-[93px]">연령등급</p>
+              <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.ageRating}</p>
               <p className="text-[14px] font-normal text-gray-900 flex-1">
                 {ageRating || '-'}
               </p>
             </div>
             {/* 러닝타임 */}
             <div className="flex items-start">
-              <p className="text-[14px] font-normal text-gray-700 w-[93px]">러닝타임</p>
+              <p className="text-[14px] font-normal text-gray-700 w-[93px]">{t.runtime}</p>
               <p className="text-[14px] font-normal text-gray-900 flex-1">
                 {runtime || '-'}
               </p>
@@ -322,35 +429,35 @@ export default function ContentTMDB() {
 
         {/* 보러가기 섹션 */}
         <div className="px-5 mb-6">
-          <h2 className="text-[16px] font-bold text-black mb-4">보러가기</h2>
+          <h2 className="text-[16px] font-bold text-black mb-4">{t.watch}</h2>
           {/* OTT 필터 */}
           <div className="flex items-center gap-6 mb-4">
             <button
               onClick={() => handleFilterClick('flatrate')}
               className={`flex flex-col items-center gap-1 ${selectedFilter === 'flatrate' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
             >
-              <p className="text-[16px] font-normal text-black">정액제 {flatrateCount}</p>
+              <p className="text-[16px] font-normal text-black">{t.flatrate} {flatrateCount}</p>
               <div className={`w-[55px] h-[2px] border-b ${selectedFilter === 'flatrate' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
             </button>
             <button
               onClick={() => handleFilterClick('free')}
               className={`flex flex-col items-center gap-1 ${selectedFilter === 'free' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
             >
-              <p className="text-[16px] font-normal text-black">무료 {freeCount}</p>
+              <p className="text-[16px] font-normal text-black">{t.free} {freeCount}</p>
               <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'free' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
             </button>
             <button
               onClick={() => handleFilterClick('rent')}
               className={`flex flex-col items-center gap-1 ${selectedFilter === 'rent' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
             >
-              <p className="text-[16px] font-normal text-black">대여 {rentCount}</p>
+              <p className="text-[16px] font-normal text-black">{t.rent} {rentCount}</p>
               <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'rent' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
             </button>
             <button
               onClick={() => handleFilterClick('buy')}
               className={`flex flex-col items-center gap-1 ${selectedFilter === 'buy' ? 'opacity-100' : 'opacity-60'} hover:opacity-100 transition-opacity`}
             >
-              <p className="text-[16px] font-normal text-black">구매 {buyCount}</p>
+              <p className="text-[16px] font-normal text-black">{t.buy} {buyCount}</p>
               <div className={`w-[55px] h-[1px] border-b ${selectedFilter === 'buy' ? 'border-[#2e2c6a]' : 'border-transparent'}`} />
             </button>
           </div>
@@ -393,7 +500,7 @@ export default function ContentTMDB() {
               ))
             ) : (
               <p className="text-[14px] font-normal text-gray-500 text-center py-4">
-                {selectedFilter ? '해당 타입으로 시청 가능한 플랫폼이 없습니다.' : '시청 가능한 플랫폼이 없습니다.'}
+                {selectedFilter ? t.noPlatformFiltered : t.noPlatform}
               </p>
             )}
           </div>
@@ -401,7 +508,7 @@ export default function ContentTMDB() {
 
         {/* 출연진/제작진 섹션 */}
         <div className="px-5 mb-6">
-          <h2 className="text-[16px] font-semibold text-black mb-4">출연진/제작진</h2>
+          <h2 className="text-[16px] font-semibold text-black mb-4">{t.cast}</h2>
           {/* 출연진 그리드 */}
           {cast.length > 0 ? (
             <div className="grid grid-cols-3 gap-x-4 gap-y-4 mb-4">
@@ -423,9 +530,9 @@ export default function ContentTMDB() {
                   <div className="bg-gray-900 rounded-[10px] px-1.5 py-0.5 mb-1 w-full min-w-0">
                     <span
                       className="text-[14px] font-normal text-white block truncate text-center"
-                      title={actor.character || '출연'}
+                      title={actor.character || t.castRole}
                     >
-                      {actor.character || '출연'}
+                      {actor.character || t.castRole}
                     </span>
                   </div>
                   <span
@@ -439,7 +546,7 @@ export default function ContentTMDB() {
             </div>
           ) : (
             <div className="text-[14px] font-normal text-gray-500 text-center py-4">
-              출연진 정보가 없습니다.
+              {t.noCast}
             </div>
           )}
 
@@ -450,7 +557,7 @@ export default function ContentTMDB() {
           <div className="space-y-4">
             {director && (
               <div className="flex items-start gap-4">
-                <span className="text-[16px] font-normal text-black flex-shrink-0">감독</span>
+                <span className="text-[16px] font-normal text-black flex-shrink-0">{t.director}</span>
                 <span
                   className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
                   title={director}
@@ -461,7 +568,7 @@ export default function ContentTMDB() {
             )}
             {writer && (
               <div className="flex items-start gap-4">
-                <span className="text-[16px] font-normal text-black flex-shrink-0">극본</span>
+                <span className="text-[16px] font-normal text-black flex-shrink-0">{t.writer}</span>
                 <span
                   className="text-[16px] font-normal text-[#7a8dd6] flex-1 truncate"
                   title={writer}
@@ -472,20 +579,20 @@ export default function ContentTMDB() {
             )}
             {!director && !writer && (
               <div className="text-[14px] font-normal text-gray-500">
-                제작진 정보가 없습니다.
+                {t.noCrew}
               </div>
             )}
           </div>
 
           {/* 더보기 버튼 */}
           <button className="w-full h-[52px] bg-[#2e2c6a] rounded-[10px] mt-6 flex items-center justify-center">
-            <span className="text-[16px] font-semibold text-white">출연진/제작진 더보기</span>
+            <span className="text-[16px] font-semibold text-white">{t.moreCast}</span>
           </button>
         </div>
 
         {/* 영상 및 포스터 콜라주 섹션 */}
         <div className="px-5 mb-6">
-          <h2 className="text-[16px] font-semibold text-black mb-4">영상 및 포스터 콜라주</h2>
+          <h2 className="text-[16px] font-semibold text-black mb-4">{t.media}</h2>
           {mediaItems.length > 0 ? (
             <div className="space-y-3">
               {/* 첫 번째 행 (2개) */}
@@ -508,7 +615,7 @@ export default function ContentTMDB() {
                       >
                         <img
                           src={item.thumbnail}
-                          alt={item.type === 'video' ? '비디오' : '포스터'}
+                          alt={item.type === 'video' ? t.video : t.poster}
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement
@@ -587,7 +694,7 @@ export default function ContentTMDB() {
                       >
                         <img
                           src={item.thumbnail}
-                          alt={item.type === 'video' ? '비디오' : '포스터'}
+                          alt={item.type === 'video' ? t.video : t.poster}
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement
@@ -616,7 +723,7 @@ export default function ContentTMDB() {
             </div>
           ) : (
             <div className="text-[14px] font-normal text-gray-500 text-center py-4">
-              영상 및 포스터 정보가 없습니다.
+              {t.noMedia}
             </div>
           )}
         </div>
@@ -671,17 +778,44 @@ async function fetchOttProviders(
   return list
 }
 
-async function fetchMedia(
+async function fetchCredits(
   type: 'movie' | 'tv',
   id: string
+): Promise<{ cast: any[]; crew: any[] } | null> {
+  const apiKey = import.meta.env.VITE_TMDB_API_KEY
+  if (!apiKey) return null
+  const endpoint = type === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/credits`)
+  
+  if (!apiKey.startsWith('eyJ')) {
+    url.searchParams.set('api_key', apiKey)
+  }
+  
+  const res = await fetch(url.toString(), {
+    headers: apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : undefined,
+  }).catch(() => null)
+  
+  if (!res || !res.ok) return null
+  const json = await res.json()
+  return {
+    cast: json.cast || [],
+    crew: json.crew || [],
+  }
+}
+
+async function fetchMedia(
+  type: 'movie' | 'tv',
+  id: string,
+  language: 'ko' | 'en' = 'ko'
 ): Promise<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) return []
+  const langParam = language === 'en' ? 'en-US' : 'ko-KR'
   const endpoint = type === 'movie' ? 'movie' : 'tv'
   const headers = apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : undefined
   const videosUrl = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/videos`)
   const imagesUrl = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/images`)
-  videosUrl.searchParams.set('language', 'ko-KR')
+  videosUrl.searchParams.set('language', langParam)
   if (!apiKey.startsWith('eyJ')) {
     videosUrl.searchParams.set('api_key', apiKey)
     imagesUrl.searchParams.set('api_key', apiKey)
