@@ -16,7 +16,6 @@ import Reload from '../../assets/reload.svg'
 import RecommendInactive from '../../assets/RecommendInactive.svg'
 import RecommendActive from '../../assets/RecommendActive.svg'
 
-// [추가] 언어별 무드 이름 매핑
 const MOOD_TABLE = {
   ko: {
     '01': '로맨스',
@@ -42,7 +41,6 @@ const MOOD_TABLE = {
   },
 }
 
-// [추가] 장르 번역 맵 (한국어 -> 영어)
 const GENRE_TRANSLATION: Record<string, { ko: string; en: string }> = {
   '영화': { ko: '영화', en: 'Movie' },
   '드라마': { ko: '드라마', en: 'Drama' },
@@ -50,7 +48,6 @@ const GENRE_TRANSLATION: Record<string, { ko: string; en: string }> = {
   '예능': { ko: '예능', en: 'Variety Show' },
 }
 
-// [추가] UI 텍스트 다국어 정의
 const UI_TEXT = {
   ko: {
     genre: '장르',
@@ -175,8 +172,6 @@ export default function Main() {
     })
   }
 
-  // [수정] recommendations.length를 의존성에서 제거하여 무한 루프 방지
-  // 대신 함수 내부에서 현재 상태를 체크하도록 변경
   const loadRecommendations = useCallback(async (forceRefresh: boolean = false) => {
       const startTime = Date.now()
       const MIN_LOADING_TIME = 1500 // 최소 로딩 시간 1.5초
@@ -188,19 +183,13 @@ export default function Main() {
         // 프로필 가져오기 또는 생성
         let profile = await getProfile(userId)
 
-        // [수정] 온보딩 데이터가 있으면 항상 업데이트 (forceRefresh가 아니어도)
-        // 온보딩에서 새로 선택한 데이터가 기존 프로필을 덮어써야 함
-        // 사용 후에는 클리어하여 다음 로드 시 세션 삭제를 방지
         if (onboardingData) {
           const updatedProfile = await saveProfile(userId, onboardingData)
           profile = updatedProfile ?? profile
           // 온보딩 데이터 사용 후 클리어 (한 번만 사용되도록)
           setOnboardingData(null)
-          console.log('[온보딩 데이터 처리 완료 및 클리어]')
         }
 
-        // 로그인한 사용자의 경우 최신 프로필 정보 다시 가져오기 (subscribed_otts 포함)
-        // 단, 온보딩 데이터가 있으면 이미 업데이트했으므로 다시 가져올 필요 없음
         if (user && profile && !onboardingData) {
           const latestProfile = await getProfile(user.id)
           if (latestProfile) {
@@ -214,40 +203,22 @@ export default function Main() {
           // 세션 스토리지에도 프로필 저장 (네비게이션 바 이동 시 복원용)
           saveProfileToStorage(profile)
           
-          // 디버깅: 프로필 정보 전체 확인 (장르, 무드, 구독 정보)
-          console.log('[프로필 로드]', {
-            userId,
-            genre: profile.genre,
-            moods: profile.moods,
-            moodNames: profile.moods.map(id => MOOD_TABLE.ko[id as keyof typeof MOOD_TABLE.ko] || id),
-            hasSubscribedOtts: !!profile.subscribed_otts,
-            subscribedOtts: profile.subscribed_otts,
-            onboardingData: onboardingData ? { genre: onboardingData.genre, moods: onboardingData.moods } : null,
-          })
-          
-          // [추가] 병렬로 데이터 로드 (성능 개선)
           const [notInterestedIdsFromDb, contents] = await Promise.all([
             // 관심없음 콘텐츠 ID 목록 가져오기 (로그인한 사용자인 경우)
             user ? getNotInterestedContentIds(user.id).catch(() => [] as string[]) : Promise.resolve([] as string[]),
-            // 추천 콘텐츠 가져오기 (최대 10개 반환)
             getRecommendations(profile, forceRefresh)
           ])
           
-          // 초기 로드 시 관심없음 상태 반영
           if (user && notInterestedIdsFromDb.length > 0) {
             setNotInterestedIds(new Set(notInterestedIdsFromDb))
           }
           
-          // 관심없음 콘텐츠 필터링
-          let filteredContents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
+          const filteredContents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
           
-          // 최대 3개만 사용
           const finalContents = filteredContents.slice(0, 3)
           
-          // [추가] 이미지 프리로드 (로딩 중에 미리 로드)
           preloadImages(finalContents)
           
-          // [추가] 최소 로딩 시간이 지날 때까지 대기
           const elapsedTime = Date.now() - startTime
           const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime)
           
@@ -255,14 +226,9 @@ export default function Main() {
             await new Promise(resolve => setTimeout(resolve, remainingTime))
           }
           
-          // [수정] 상태 업데이트를 먼저 하고, 렌더링 후 로딩 종료
           setRecommendations(finalContents)
-          // sessionStorage에 저장 (페이지 이동 후에도 유지)
           saveRecommendationsToStorage(finalContents)
-          // 추천 로드 시 인덱스 초기화
           setCurrentIndex(0)
-          
-          // [추가] 데이터 준비 완료 플래그 설정 (렌더링 후 로딩 종료를 위해)
           setIsDataReady(true)
         }
       } catch (error) {
@@ -277,8 +243,7 @@ export default function Main() {
         setRecommendations([])
         setIsDataReady(true)
       }
-      // [수정] finally에서 로딩을 종료하지 않음 - useEffect에서 처리
-  }, [onboardingData, user]) // [수정] recommendations.length 제거
+  }, [onboardingData, user])
 
   // [추가] recommendations가 업데이트되고 렌더링된 후 로딩 종료
   useEffect(() => {
@@ -317,14 +282,12 @@ export default function Main() {
     const currentPath = location.pathname
     const prevPath = sessionStorage.getItem('prevPath') || prevPathRef.current
     
-    // [추가] 온보딩에서 넘어온 경우 즉시 로딩 화면 표시 및 데이터 로딩 시작
     const shouldShowLoadingScreen = onboardingData || prevPath?.includes('/onboarding')
     if (shouldShowLoadingScreen) {
       setShowLoadingScreen(true)
       setIsLoading(true)
       setShowSimpleLoading(false)
       
-      // [추가] 이미 로드된 데이터가 있는지 확인
       try {
         const storedRecommendations = sessionStorage.getItem('mainRecommendations')
         const storedProfile = loadProfileFromStorage()
@@ -332,20 +295,13 @@ export default function Main() {
         if (storedRecommendations && storedProfile) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[온보딩에서 메인 이동] 미리 로드된 데이터 사용:', parsed.length, '개')
-            
-            // 미리 로드된 데이터 사용
             setRecommendations(parsed)
             setProfile(storedProfile)
             
             // 이미지 프리로드
             preloadImages(parsed)
-            
-            // 데이터 준비 완료 플래그 설정
             setIsDataReady(true)
-            
-            // 로딩은 useEffect에서 처리 (렌더링 후 종료)
-            return // 데이터가 이미 있으면 새로 로드하지 않음
+            return
           }
         }
       } catch (error) {
@@ -353,11 +309,9 @@ export default function Main() {
       }
       
       // [추가] 미리 로드된 데이터가 없으면 즉시 데이터 로딩 시작
-      console.log('[온보딩에서 메인 이동] 미리 로드된 데이터 없음, 즉시 데이터 로딩 시작')
       void loadRecommendations()
     }
     
-    // [리팩토링] 네비게이션 바 경로 목록
     const navigationBarPaths = ['/main', '/mypage', '/search']
     const isNavigationBarNavigation = 
       prevPath && 
@@ -365,21 +319,9 @@ export default function Main() {
       navigationBarPaths.includes(currentPath) && 
       prevPath !== currentPath
     
-    console.log('[Main useEffect]', { 
-      currentPath, 
-      prevPath, 
-      isNavigationBarNavigation,
-      hasRecommendations: recommendations.length > 0,
-      hasProfile: !!profile,
-      hasOnboardingData: !!onboardingData,
-      shouldShowLoadingScreen
-    })
-    
     // [리팩토링] 1. 네비게이션 바 이동 감지 및 처리
     // 온보딩에서 넘어온 경우는 네비게이션 바 이동이 아니므로 건너뜀
     if (isNavigationBarNavigation && !shouldShowLoadingScreen) {
-      console.log('[네비게이션 바 이동] 감지됨 - 세션 데이터 복원 시도')
-      
       try {
         // 세션에서 추천 데이터 복원
         const storedRecommendations = sessionStorage.getItem('mainRecommendations')
@@ -388,76 +330,56 @@ export default function Main() {
         if (storedRecommendations) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[네비게이션 바 이동] 세션 데이터 복원 성공:', parsed.length, '개')
-            
-            // 추천 데이터 복원
             setRecommendations(parsed)
             
-            // 프로필 데이터 복원 (없을 때만)
             if (storedProfile) {
               setProfile(prev => prev || storedProfile)
             }
             
-            // 로딩 상태 해제
             setIsLoading(false)
             setShowSimpleLoading(false)
             setShowLoadingScreen(false)
-            
-            // 경로 업데이트
             prevPathRef.current = currentPath
             sessionStorage.setItem('prevPath', currentPath)
-            return // 네비게이션 바 이동 시 절대 새로 로드하지 않음
+            return
           }
         }
       } catch (error) {
         console.error('[네비게이션 바 이동] 세션 데이터 복원 실패:', error)
       }
       
-      // 세션 데이터가 없어도 기존 데이터 유지 (로드하지 않음)
-      console.log('[네비게이션 바 이동] 세션 데이터 없음, 기존 데이터 유지')
       setIsLoading(false)
       setShowSimpleLoading(false)
       setShowLoadingScreen(false)
-      prevPathRef.current = currentPath
-      sessionStorage.setItem('prevPath', currentPath)
-      return // 네비게이션 바 이동 시 절대 새로 로드하지 않음
-    }
-    
-    // [리팩토링] 2. 온보딩 데이터 처리 (새로운 추천이 필요한 경우)
-    // [수정] 온보딩에서 넘어온 경우는 이미 위에서 처리했으므로 여기서는 건너뜀
-    if (onboardingData && !shouldShowLoadingScreen) {
-      console.log('[온보딩 데이터 처리] 세션 초기화 및 새로 로드')
-      sessionStorage.removeItem('mainRecommendations')
-      sessionStorage.removeItem('mainProfile')
-      setRecommendations([])
-      // 프로필은 loadRecommendations에서 업데이트됨
-    }
-    
-    // [리팩토링] 3. 기존 데이터가 있으면 유지 (온보딩이 아닐 때)
-    if (recommendations.length > 0 && !onboardingData) {
-      console.log('[데이터 유지] 기존 추천 데이터 사용:', recommendations.length, '개')
-      
-      // 프로필이 없으면 세션에서 복원 시도
-      if (!profile) {
-        const storedProfile = loadProfileFromStorage()
-        if (storedProfile) {
-          console.log('[프로필 복원] 세션에서 프로필 복원')
-          setProfile(storedProfile)
-        }
-      }
-      
-      // 로딩 상태 해제
-      setIsLoading(false)
-      setShowSimpleLoading(false)
-      setShowLoadingScreen(false)
-      
-      // 경로 업데이트
       prevPathRef.current = currentPath
       sessionStorage.setItem('prevPath', currentPath)
       return
     }
     
-    // [리팩토링] 4. 세션 데이터 복원 시도 (데이터가 없을 때)
+    // [리팩토링] 2. 온보딩 데이터 처리 (새로운 추천이 필요한 경우)
+    // [수정] 온보딩에서 넘어온 경우는 이미 위에서 처리했으므로 여기서는 건너뜀
+    if (onboardingData && !shouldShowLoadingScreen) {
+      sessionStorage.removeItem('mainRecommendations')
+      sessionStorage.removeItem('mainProfile')
+      setRecommendations([])
+    }
+    
+    if (recommendations.length > 0 && !onboardingData) {
+      if (!profile) {
+        const storedProfile = loadProfileFromStorage()
+        if (storedProfile) {
+          setProfile(storedProfile)
+        }
+      }
+      
+      setIsLoading(false)
+      setShowSimpleLoading(false)
+      setShowLoadingScreen(false)
+      prevPathRef.current = currentPath
+      sessionStorage.setItem('prevPath', currentPath)
+      return
+    }
+    
     if (recommendations.length === 0 && !onboardingData) {
       try {
         const storedRecommendations = sessionStorage.getItem('mainRecommendations')
@@ -466,25 +388,18 @@ export default function Main() {
         if (storedRecommendations) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[세션 데이터 복원] 성공:', parsed.length, '개')
-            
-            // 추천 데이터 복원
             setRecommendations(parsed)
             
-            // 프로필 데이터 복원
             if (storedProfile) {
               setProfile(storedProfile)
             }
             
-            // 로딩 상태 해제
             setIsLoading(false)
             setShowSimpleLoading(false)
             setShowLoadingScreen(false)
-            
-            // 경로 업데이트
             prevPathRef.current = currentPath
             sessionStorage.setItem('prevPath', currentPath)
-            return // 복원 성공 시 로드 스킵
+            return
           }
         }
       } catch (error) {
@@ -499,19 +414,12 @@ export default function Main() {
       setShowSimpleLoading(false)
       setShowLoadingScreen(false)
       setIsLoading(false)
-      
-      // 경로 업데이트
       prevPathRef.current = currentPath
       sessionStorage.setItem('prevPath', currentPath)
-      
-      // 데이터 로드 시작 (온보딩이 아닌 경우에만)
-      console.log('[데이터 로드 시작]', { currentPath, prevPath, onboardingData: !!onboardingData, shouldShowLoadingScreen })
       void loadRecommendations()
     } else {
-      // 온보딩에서 넘어온 경우는 이미 위에서 데이터 로딩을 시작했으므로 경로만 업데이트
       prevPathRef.current = currentPath
       sessionStorage.setItem('prevPath', currentPath)
-      console.log('[온보딩에서 메인 이동] 데이터 로딩 이미 시작됨')
     }
   }, [location.pathname, loadRecommendations, onboardingData])
 
@@ -531,12 +439,10 @@ export default function Main() {
   const genreValue = profile?.genre || onboardingData?.genre
   const displayMoods = profile?.moods || onboardingData?.moods || []
 
-  // [수정] 현재 언어에 맞는 장르 이름 표시
   const displayGenre = genreValue
     ? (GENRE_TRANSLATION[genreValue]?.[language] || genreValue)
     : null
 
-  // [수정] 현재 언어에 맞는 무드 이름 표시
   const moodNames = displayMoods
     .map((id) => moodMap[id as keyof typeof moodMap] || id)
     .join(', ')
@@ -924,7 +830,6 @@ export default function Main() {
           >
             <img
               src={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? RecommendInactive : RecommendActive}
-              // [수정] 관심없음 텍스트
               alt={notInterestedIds.has(recommendations[currentIndex]?.id || '') ? t.notInterestedCancel : t.notInterested}
               className="w-[28px] h-[28px]"
             />

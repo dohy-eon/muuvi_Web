@@ -58,17 +58,13 @@ const GENRE_COLORS: Record<string, string> = {
 
 // 콘텐츠에서 주요 장르 추출 (tags 또는 genres 배열 사용)
 function getPrimaryGenre(content: Content): string {
-  // tags 배열이 있으면 첫 번째 태그 사용
   if (content.tags && content.tags.length > 0) {
     const firstTag = content.tags[0]
-    // "Action & Adventure" 같은 경우 "Action"만 추출
     return firstTag.split('&')[0].trim()
   }
-  // genres 배열이 있으면 첫 번째 장르 사용
   if (content.genres && content.genres.length > 0) {
     return content.genres[0]
   }
-  // genre 필드 사용 (예: '영화', '드라마', '애니메이션', '예능')
   if (content.genre) {
     return content.genre
   }
@@ -91,11 +87,9 @@ function MovieStar({
   const ref = useRef<THREE.Mesh>(null)
   const [hovered, setHover] = useState(false)
 
-  // 별이 반짝이는 애니메이션
   useFrame((state) => {
     if (ref.current) {
       const t = state.clock.getElapsedTime()
-      // 크기 진동 (반짝임 효과)
       const scale = isSelected ? 1.5 : hovered ? 1.2 : 1 + Math.sin(t * 2 + position[0]) * 0.2
       ref.current.scale.setScalar(scale)
     }
@@ -103,7 +97,6 @@ function MovieStar({
 
   return (
     <group position={position}>
-      {/* 별 (Mesh) */}
       <mesh
         ref={ref}
         onClick={(e) => {
@@ -113,7 +106,7 @@ function MovieStar({
         onPointerOver={() => setHover(true)}
         onPointerOut={() => setHover(false)}
       >
-        <sphereGeometry args={[0.3, 16, 16]} /> {/* 별 크기 */}
+        <sphereGeometry args={[0.3, 16, 16]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
@@ -122,7 +115,6 @@ function MovieStar({
         />
       </mesh>
 
-      {/* 호버 시 나타나는 텍스트 라벨 (Billboard: 항상 카메라를 봄) */}
       {(hovered || isSelected) && (
         <Billboard position={[0, 0.8, 0]}>
           <Text
@@ -145,8 +137,6 @@ function MovieStar({
 function CameraController({ target }: { target: [number, number, number] | null }) {
   useFrame((state) => {
     if (target) {
-      // 부드럽게 타겟 위치로 이동 (Lerp)
-      // 카메라 위치: 타겟에서 z축으로 5만큼 떨어진 곳
       state.camera.position.lerp(new THREE.Vector3(target[0], target[1], target[2] + 8), 0.05)
       state.camera.lookAt(target[0], target[1], target[2])
     }
@@ -181,11 +171,9 @@ export default function Universe() {
   const [selectedContent, setSelectedContent] = useState<Content | null>(null)
   const [targetPosition, setTargetPosition] = useState<[number, number, number] | null>(null)
 
-  // 데이터 로드
   useEffect(() => {
     const fetchContents = async () => {
       try {
-        // 100개 정도의 영화를 가져옵니다 (시각적 풍성함을 위해)
         const { data, error } = await supabase.from('contents').select('*').limit(100)
 
         if (error) {
@@ -203,16 +191,12 @@ export default function Universe() {
     fetchContents()
   }, [])
 
-  // 각 영화의 3D 좌표 계산 (한 번만 실행)
   const stars = useMemo(() => {
     return contents.map((content) => {
       const genre = getPrimaryGenre(content)
-      // 기본 장르 중심점 가져오기
       const center = GENRE_CLUSTERS[genre] || GENRE_CLUSTERS['default']
 
-      // 중심점 주변에 랜덤하게 분포 (Random Spread)
-      // Math.random() - 0.5 로 -0.5 ~ 0.5 범위 생성 후 확산
-      const spread = 5 // 확산 범위
+      const spread = 5
       const x = center[0] + (Math.random() - 0.5) * spread
       const y = center[1] + (Math.random() - 0.5) * spread
       const z = center[2] + (Math.random() - 0.5) * spread
@@ -237,11 +221,8 @@ export default function Universe() {
     setTargetPosition(null)
   }
 
-  // 주요 장르만 필터링 (언어별 우선, 중복 제거)
   const mainGenres = useMemo(() => {
     const mainGenreList: string[] = []
-    
-    // 언어별 장르 우선, 중복 제거
     const genreKeys = Object.keys(GENRE_CLUSTERS).filter((g) => g !== 'default')
     const seenCoords = new Set<string>()
     
@@ -249,16 +230,13 @@ export default function Universe() {
       const coords = JSON.stringify(GENRE_CLUSTERS[genre])
       if (!seenCoords.has(coords)) {
         seenCoords.add(coords)
-        // 언어에 따라 한글 또는 영문 장르 우선 선택
         if (language === 'ko') {
-          // 한글 장르 우선
           if (/[가-힣]/.test(genre)) {
             mainGenreList.push(genre)
           } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && /[가-힣]/.test(g))) {
             mainGenreList.push(genre)
           }
         } else {
-          // 영문 장르 우선
           if (!/[가-힣]/.test(genre)) {
             mainGenreList.push(genre)
           } else if (!genreKeys.some((g) => g !== genre && JSON.stringify(GENRE_CLUSTERS[g]) === coords && !/[가-힣]/.test(g))) {
@@ -268,32 +246,23 @@ export default function Universe() {
       }
     }
     
-    return mainGenreList.slice(0, 8) // 최대 8개만 표시
+    return mainGenreList.slice(0, 8)
   }, [language])
 
   return (
     <div className="w-full h-screen bg-black relative overflow-hidden font-pretendard">
-      {/* 3D Canvas */}
       <Canvas camera={{ position: [0, 0, 25], fov: 60 }}>
-        {/* 배경 별 (먼 배경) */}
         <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-
-        {/* 조명 */}
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />
-
-        {/* 빛번짐 효과 (Bloom) */}
-        {/* 별들의 emissive(발광) 속성과 반응하여 빛나게 만듭니다 */}
         <EffectComposer>
           <Bloom
-            luminanceThreshold={0.08} // 이 밝기 이상인 픽셀만 빛나게 함 (0~1)
-            luminanceSmoothing={0.9} // 경계를 부드럽게 처리
-            intensity={4.5} // 빛 번짐 강도 (높을수록 강렬함)
-            mipmapBlur={true} // 고퀄리티 블러 효과 사용
+            luminanceThreshold={0.08}
+            luminanceSmoothing={0.9}
+            intensity={4.5}
+            mipmapBlur={true}
           />
         </EffectComposer>
-
-        {/* 영화 별들 */}
         {stars.map((star) => (
           <MovieStar
             key={star.content.id}
@@ -304,11 +273,7 @@ export default function Universe() {
             isSelected={selectedContent?.id === star.content.id}
           />
         ))}
-
-        {/* 카메라 컨트롤 & 인터랙션 */}
         <CameraController target={targetPosition} />
-
-        {/* 빈 공간 클릭 시 선택 해제용 투명 mesh */}
         <mesh
           visible={false}
           onClick={handleBackgroundClick}
@@ -317,22 +282,14 @@ export default function Universe() {
           <sphereGeometry />
         </mesh>
       </Canvas>
-
-      {/* UI Overlay: 상단 헤더 */}
       <div className="absolute top-0 left-0 right-0 z-10">
-        {/* 그라데이션 배경 */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none" />
-        
         <div className="relative px-6 py-4">
-          {/* 상단 좌우 영역 */}
           <div className="flex items-start justify-between mb-4">
-            {/* 타이틀 */}
             <div className="pointer-events-none">
               <h1 className="text-white text-2xl font-bold drop-shadow-lg mb-1">{t.title}</h1>
               <p className="text-white/60 text-xs">{t.subtitle}</p>
             </div>
-
-            {/* 뒤로가기 버튼 */}
             <button
               onClick={() => navigate('/main')}
               className="w-9 h-9 bg-white/5 backdrop-blur-xl rounded-full flex items-center justify-center text-white hover:bg-white/15 transition-all duration-300 border border-white/10 hover:border-white/30 hover:scale-110"
@@ -349,8 +306,6 @@ export default function Universe() {
               </svg>
             </button>
           </div>
-
-          {/* 장르별 워프 버튼 - 카테고리 스타일 */}
           <div className="flex flex-wrap gap-2 justify-start">
             {mainGenres.map((genre, index) => (
               <button
@@ -364,14 +319,12 @@ export default function Universe() {
                   animationDelay: `${index * 50}ms`,
                 }}
               >
-                {/* 장르 색상 그라데이션 배경 (호버 시) */}
                 <div 
                   className="absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-300 rounded-full"
                   style={{
                     background: `linear-gradient(135deg, ${GENRE_COLORS[genre] || '#ffffff'}40, ${GENRE_COLORS[genre] || '#ffffff'}20)`
                   }}
                 />
-                {/* 장르 색상 포인트 */}
                 <div 
                   className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
                   style={{ 
@@ -385,12 +338,9 @@ export default function Universe() {
           </div>
         </div>
       </div>
-
-      {/* UI Overlay: 선택된 영화 상세 카드 (하단 팝업) */}
       {selectedContent && (
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 animate-fade-in-up">
           <div className="relative">
-            {/* 닫기 버튼 */}
             <button
               onClick={() => handleBackgroundClick()}
               className="absolute -top-3 -right-3 z-30 bg-white text-black rounded-full p-1 shadow-lg"
@@ -404,13 +354,10 @@ export default function Universe() {
                 <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
               </svg>
             </button>
-            {/* 기존 RecommendationCard 재사용 (클릭 시 상세 페이지 이동 기능 포함됨) */}
             <RecommendationCard content={selectedContent} isActive={true} />
           </div>
         </div>
       )}
-
-      {/* 애니메이션 스타일 (tailwind.config.js에 없다면 인라인으로 대체 가능) */}
       <style>{`
         @keyframes fadeInUp {
           from { opacity: 0; transform: translate(-50%, 20px); }

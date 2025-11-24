@@ -62,7 +62,9 @@ export default function Search() {
         if (Array.isArray(parsed)) {
           setRecent(parsed.slice(0, 10))
         }
-      } catch {}
+      } catch {
+        // Ignore parse errors
+      }
     }
   }, [])
 
@@ -119,7 +121,6 @@ export default function Search() {
       
       // 2. 제목 검색 결과가 하나도 없다면? -> AI에게 물어봅니다.
       if (data.length === 0) {
-        console.log('제목 검색 결과 없음, AI 추천으로 전환:', value)
         data = await searchWithAI(value)
       }
       
@@ -440,7 +441,6 @@ export default function Search() {
                 >
                   <div className="w-20 h-28 rounded-[8px] bg-[#e7e9ec] overflow-hidden">
                     {item.posterUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.posterUrl}
                         alt={item.title}

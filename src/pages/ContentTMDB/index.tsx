@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useRecoilValue } from 'recoil'
 import BottomNavigation from '../../components/BottomNavigation'
 import { languageState } from '../../recoil/userState'
-import { buildPosterUrl, getTMDBDetail, TMDBDetail } from '../../lib/tmdb/search'
+import { buildPosterUrl, getTMDBDetail, type TMDBDetail } from '../../lib/tmdb/search'
+import type { TMDBMovieDetail, TMDBTVDetail, TMDBCredits } from '../../types/tmdb'
 
 // UI 텍스트 번역
 const CONTENT_TMDB_TEXT = {
@@ -107,15 +108,16 @@ export default function ContentTMDB() {
           }
           setDetail(data)
           // 기본 정보
-          const g = (data as any).genres ?? []
+          const g = data.genres ?? []
           setGenres(g)
 
           // 연령등급
-          if (type === 'movie') {
-            const rel = (data as any).release_dates?.results?.find((r: any) => r.iso_3166_1 === 'KR')
+          if (type === 'movie' && data.mediaType === 'movie') {
+            const movieData = data as TMDBMovieDetail
+            const rel = movieData.release_dates?.results?.find((r) => r.iso_3166_1 === 'KR')
             const cert = rel?.release_dates?.[0]?.certification || null
             setAgeRating(cert || null)
-            const rt = (data as any).runtime
+            const rt = movieData.runtime
             if (rt) {
               const h = Math.floor(rt / 60)
               const m = rt % 60
@@ -123,19 +125,20 @@ export default function ContentTMDB() {
             } else {
               setRuntime(null)
             }
-          } else {
-            const ratings = (data as any).content_ratings?.results || []
-            const kr = ratings.find((r: any) => r.iso_3166_1 === 'KR')
+          } else if (type === 'tv' && data.mediaType === 'tv') {
+            const tvData = data as TMDBTVDetail
+            const ratings = tvData.content_ratings?.results || []
+            const kr = ratings.find((r) => r.iso_3166_1 === 'KR')
             let rating = kr?.rating || null
             if (!rating) {
-              const us = ratings.find((r: any) => r.iso_3166_1 === 'US')
+              const us = ratings.find((r) => r.iso_3166_1 === 'US')
               rating = us?.rating || null
               if (!rating) {
                 rating = ratings?.[0]?.rating || null
               }
             }
             setAgeRating(rating)
-            const epi = (data as any).episode_run_time?.[0]
+            const epi = tvData.episode_run_time?.[0]
             if (epi) {
               const h = Math.floor(epi / 60)
               const m = epi % 60
@@ -146,9 +149,9 @@ export default function ContentTMDB() {
           }
 
           // 출연/제작
-          const credits = (data as any).credits
+          const credits = data.credits
           if (credits && (credits.cast || credits.crew)) {
-            const castList = (credits.cast || []).slice(0, 6).map((actor: any) => ({
+            const castList = (credits.cast || []).slice(0, 6).map((actor) => ({
               id: actor.id,
               name: actor.name || '',
               character: actor.character || actor.roles?.[0]?.character || '',
@@ -157,7 +160,7 @@ export default function ContentTMDB() {
                 : null,
             }))
             setCast(castList)
-            const crew: any[] = credits.crew || []
+            const crew = credits.crew || []
             // 감독: Director 우선, 없으면 Directing 부서 최상위, TV는 Executive Producer 보조
             const directorCandidate =
               crew.find((p) => p.job === 'Director') ||
@@ -165,16 +168,17 @@ export default function ContentTMDB() {
               (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
             setDirector(directorCandidate?.name ?? null)
             // 극본: Writer, Screenplay, Story, Novel, TV는 Creator 포함
-            let writerCandidate =
+            const writerCandidate =
               crew.find((p) => p.job === 'Writer') ||
               crew.find((p) => p.job === 'Screenplay') ||
               crew.find((p) => p.job === 'Story') ||
               crew.find((p) => p.job === 'Novel') ||
               (type === 'tv' ? crew.find((p) => p.job === 'Creator') : undefined)
-            if (!writerCandidate && type === 'tv') {
-              const createdBy = (data as any).created_by
+            if (!writerCandidate && type === 'tv' && data.mediaType === 'tv') {
+              const tvData = data as TMDBTVDetail
+              const createdBy = tvData.created_by
               if (Array.isArray(createdBy) && createdBy.length > 0) {
-                setWriter(createdBy.map((c: any) => c.name).filter(Boolean).join(', '))
+                setWriter(createdBy.map((c) => c.name).filter(Boolean).join(', '))
               } else {
                 setWriter(null)
               }
@@ -185,7 +189,7 @@ export default function ContentTMDB() {
             // credits가 없거나 비어있을 경우 별도로 fetch 시도
             fetchCredits(type, id).then((creditsData) => {
               if (mounted && creditsData) {
-                const castList = (creditsData.cast || []).slice(0, 6).map((actor: any) => ({
+                const castList = (creditsData.cast || []).slice(0, 6).map((actor) => ({
                   id: actor.id,
                   name: actor.name || '',
                   character: actor.character || actor.roles?.[0]?.character || '',
@@ -194,13 +198,13 @@ export default function ContentTMDB() {
                     : null,
                 }))
                 setCast(castList)
-                const crew: any[] = creditsData.crew || []
+                const crew = creditsData.crew || []
                 const directorCandidate =
                   crew.find((p) => p.job === 'Director') ||
                   crew.find((p) => p.department === 'Directing') ||
                   (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
                 setDirector(directorCandidate?.name ?? null)
-                let writerCandidate =
+                const writerCandidate =
                   crew.find((p) => p.job === 'Writer') ||
                   crew.find((p) => p.job === 'Screenplay') ||
                   crew.find((p) => p.job === 'Story') ||
@@ -213,8 +217,8 @@ export default function ContentTMDB() {
                   setWriter(writerCandidate?.name ?? null)
                 }
               }
-            }).catch((err) => {
-              console.warn('Credits fetch 실패:', err)
+            }).catch(() => {
+              // Credits fetch 실패 시 무시
             })
           }
 
@@ -224,6 +228,7 @@ export default function ContentTMDB() {
           fetchOttProviders(type, id).then((providers) => mounted && setOttProviders(providers))
         }
       } finally {
+        // Cleanup handled by mounted flag
       }
     })()
     return () => {
@@ -235,8 +240,11 @@ export default function ContentTMDB() {
     (detail && ('title' in detail ? detail.title : detail.name)) || t.detail
   const year = (() => {
     if (!detail) return ''
-    if ('release_date' in detail) return detail.release_date?.slice(0, 4) || ''
-    return (detail as any).first_air_date?.slice(0, 4) || ''
+    if (detail.mediaType === 'movie') {
+      return detail.release_date?.slice(0, 4) || ''
+    } else {
+      return detail.first_air_date?.slice(0, 4) || ''
+    }
   })()
   const poster = buildPosterUrl(detail && detail.poster_path)
   // const backdrop = buildBackdropUrl(detail && detail.backdrop_path)
@@ -763,15 +771,17 @@ async function fetchOttProviders(
   if (!region) return []
   const list: Array<{ provider_id: number; provider_name: string; logo_path?: string; type: 'flatrate' | 'free' | 'rent' | 'buy' }> = []
   ;(['flatrate', 'free', 'rent', 'buy'] as const).forEach((k) => {
-    const arr = (region as any)[k]
+    const arr = region[k]
     if (Array.isArray(arr)) {
-      arr.forEach((p: any) => {
-        list.push({
-          provider_id: p.provider_id,
-          provider_name: p.provider_name,
-          logo_path: p.logo_path ? `https://image.tmdb.org/t/p/w300${p.logo_path}` : undefined,
-          type: k,
-        })
+      arr.forEach((p) => {
+        if (p.provider_id && p.provider_name) {
+          list.push({
+            provider_id: p.provider_id,
+            provider_name: p.provider_name,
+            logo_path: p.logo_path ? `https://image.tmdb.org/t/p/w300${p.logo_path}` : undefined,
+            type: k,
+          })
+        }
       })
     }
   })
@@ -781,7 +791,7 @@ async function fetchOttProviders(
 async function fetchCredits(
   type: 'movie' | 'tv',
   id: string
-): Promise<{ cast: any[]; crew: any[] } | null> {
+): Promise<{ cast: TMDBCredits['cast']; crew: TMDBCredits['crew'] } | null> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) return null
   const endpoint = type === 'movie' ? 'movie' : 'tv'
@@ -796,7 +806,7 @@ async function fetchCredits(
   }).catch(() => null)
   
   if (!res || !res.ok) return null
-  const json = await res.json()
+  const json = (await res.json()) as { cast?: TMDBCredits['cast']; crew?: TMDBCredits['crew'] }
   return {
     cast: json.cast || [],
     crew: json.crew || [],
@@ -826,11 +836,13 @@ async function fetchMedia(
   ])
   const items: Array<{ type: 'video' | 'image'; url: string; thumbnail: string }> = []
   if (videosRes && videosRes.ok) {
-    const vd = await videosRes.json()
+    const vd = (await videosRes.json()) as {
+      results?: Array<{ type?: string; key?: string }>
+    }
     const vids = (vd.results || [])
-      .filter((v: any) => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip')
+      .filter((v) => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip')
       .slice(0, 3)
-    vids.forEach((v: any) => {
+    vids.forEach((v) => {
       if (v.key) {
         items.push({
           type: 'video',
@@ -841,9 +853,12 @@ async function fetchMedia(
     })
   }
   if (imagesRes && imagesRes.ok) {
-    const im = await imagesRes.json()
+    const im = (await imagesRes.json()) as {
+      backdrops?: Array<{ file_path?: string }>
+      posters?: Array<{ file_path?: string }>
+    }
     const backdrops = (im.backdrops || []).slice(0, 4)
-    backdrops.forEach((b: any) => {
+    backdrops.forEach((b) => {
       if (b.file_path) {
         items.push({
           type: 'image',
@@ -853,7 +868,7 @@ async function fetchMedia(
       }
     })
     const posters = (im.posters || []).slice(0, 2)
-    posters.forEach((p: any) => {
+    posters.forEach((p) => {
       if (p.file_path) {
         items.push({
           type: 'image',
