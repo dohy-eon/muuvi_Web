@@ -1,24 +1,19 @@
+import type {
+  TMDBSearchItem,
+  NormalizedSearchResult,
+  TMDBDetail,
+  TMDBMovieDetail,
+  TMDBTVDetail,
+  TMDBCredits,
+  TMDBReleaseDates,
+  TMDBContentRatings,
+} from '../../types/tmdb'
+
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const IMG_BASE = 'https://image.tmdb.org/t/p'
 
-export type TMDBSearchItem = {
-  id: number
-  media_type?: 'movie' | 'tv' | 'person'
-  title?: string
-  name?: string
-  release_date?: string
-  first_air_date?: string
-  poster_path?: string | null
-  profile_path?: string | null
-}
-
-export type NormalizedSearchResult = {
-  id: string
-  title: string
-  year?: string
-  posterUrl?: string
-  mediaType: 'movie' | 'tv'
-}
+// Re-export for backward compatibility
+export type { TMDBSearchItem, NormalizedSearchResult, TMDBDetail }
 
 function buildImageUrl(path?: string | null, size: 'w154' | 'w185' | 'w342' | 'w500' | 'original' = 'w342') {
   if (!path) return undefined
@@ -82,27 +77,6 @@ function normalizeResults(items: TMDBSearchItem[]): NormalizedSearchResult[] {
     })
 }
 
-export type TMDBDetail =
-  | ({
-      id: number
-      title: string
-      release_date?: string
-      overview?: string
-      poster_path?: string | null
-      backdrop_path?: string | null
-      runtime?: number
-      genres?: { id: number; name: string }[]
-    } & { mediaType: 'movie' })
-  | ({
-      id: number
-      name: string
-      first_air_date?: string
-      overview?: string
-      poster_path?: string | null
-      backdrop_path?: string | null
-      episode_run_time?: number[]
-      genres?: { id: number; name: string }[]
-    } & { mediaType: 'tv' })
 
 export async function getTMDBDetail(
   type: 'movie' | 'tv',
@@ -151,41 +125,81 @@ export function buildBackdropUrl(
   return buildImageUrl(path ?? undefined, size)
 }
 
-function normalizeDetail(type: 'movie' | 'tv', data: any): TMDBDetail {
-  if (type === 'movie') {
-    return {
-      mediaType: 'movie',
-      id: data.id,
-      title: data.title,
-      release_date: data.release_date,
-      overview: data.overview,
-      poster_path: data.poster_path,
-      backdrop_path: data.backdrop_path,
-      runtime: data.runtime,
-      genres: data.genres,
-      // append_to_response로 받은 데이터 포함
-      credits: data.credits,
-      release_dates: data.release_dates,
-      content_ratings: data.content_ratings,
-      created_by: data.created_by,
-    } as any
+function normalizeDetail(type: 'movie' | 'tv', data: unknown): TMDBDetail | null {
+  if (typeof data !== 'object' || data === null) {
+    return null
   }
-  return {
+
+  const obj = data as Record<string, unknown>
+
+  if (type === 'movie') {
+    const movieDetail: TMDBMovieDetail = {
+      mediaType: 'movie',
+      id: typeof obj.id === 'number' ? obj.id : 0,
+      title: typeof obj.title === 'string' ? obj.title : '',
+      release_date: typeof obj.release_date === 'string' ? obj.release_date : undefined,
+      overview: typeof obj.overview === 'string' ? obj.overview : undefined,
+      poster_path: typeof obj.poster_path === 'string' ? obj.poster_path : obj.poster_path === null ? null : undefined,
+      backdrop_path:
+        typeof obj.backdrop_path === 'string'
+          ? obj.backdrop_path
+          : obj.backdrop_path === null
+            ? null
+            : undefined,
+      runtime: typeof obj.runtime === 'number' ? obj.runtime : undefined,
+      genres: Array.isArray(obj.genres)
+        ? obj.genres.map((g: unknown) => {
+            const genre = g as Record<string, unknown>
+            return {
+              id: typeof genre.id === 'number' ? genre.id : 0,
+              name: typeof genre.name === 'string' ? genre.name : '',
+            }
+          })
+        : undefined,
+      credits: obj.credits as TMDBCredits | undefined,
+      release_dates: obj.release_dates as TMDBReleaseDates | undefined,
+    }
+    return movieDetail
+  }
+
+  const tvDetail: TMDBTVDetail = {
     mediaType: 'tv',
-    id: data.id,
-    name: data.name,
-    first_air_date: data.first_air_date,
-    overview: data.overview,
-    poster_path: data.poster_path,
-    backdrop_path: data.backdrop_path,
-    episode_run_time: data.episode_run_time,
-    genres: data.genres,
-    // append_to_response로 받은 데이터 포함
-    credits: data.credits,
-    release_dates: data.release_dates,
-    content_ratings: data.content_ratings,
-    created_by: data.created_by,
-  } as any
+    id: typeof obj.id === 'number' ? obj.id : 0,
+    name: typeof obj.name === 'string' ? obj.name : '',
+    first_air_date: typeof obj.first_air_date === 'string' ? obj.first_air_date : undefined,
+    overview: typeof obj.overview === 'string' ? obj.overview : undefined,
+    poster_path: typeof obj.poster_path === 'string' ? obj.poster_path : obj.poster_path === null ? null : undefined,
+    backdrop_path:
+      typeof obj.backdrop_path === 'string'
+        ? obj.backdrop_path
+        : obj.backdrop_path === null
+          ? null
+          : undefined,
+    episode_run_time: Array.isArray(obj.episode_run_time)
+      ? obj.episode_run_time.filter((t): t is number => typeof t === 'number')
+      : undefined,
+    genres: Array.isArray(obj.genres)
+      ? obj.genres.map((g: unknown) => {
+          const genre = g as Record<string, unknown>
+          return {
+            id: typeof genre.id === 'number' ? genre.id : 0,
+            name: typeof genre.name === 'string' ? genre.name : '',
+          }
+        })
+      : undefined,
+    credits: obj.credits as TMDBCredits | undefined,
+    content_ratings: obj.content_ratings as TMDBContentRatings | undefined,
+    created_by: Array.isArray(obj.created_by)
+      ? obj.created_by.map((c: unknown) => {
+          const creator = c as Record<string, unknown>
+          return {
+            id: typeof creator.id === 'number' ? creator.id : 0,
+            name: typeof creator.name === 'string' ? creator.name : '',
+          }
+        })
+      : undefined,
+  }
+  return tvDetail
 }
 
 

@@ -1,8 +1,14 @@
 import { supabase } from '../supabase.ts'
-import { GENRE_TO_TMDB_ID, MOOD_TO_TMDB_GENRE } from '../tmdb/genreMapping.ts'
+import { GENRE_TO_TMDB_ID } from '../tmdb/genreMapping.ts'
 import { moodsToTMDBParams } from '../tmdb/moodToTMDB.ts'
-import { moodsToImdbTags } from '../moodMapping.ts'
 import type { Content, OTTProvider } from '../../types/index.ts'
+import type {
+  TMDBMovie,
+  TMDBGenre,
+  TMDBKeyword,
+  TMDBWatchProvidersResponse,
+} from '../../types/tmdb.ts'
+import { tmdbToContent, type TMDBDetails } from '../adapters/tmdb.ts'
 
 // Deno 환경인지 확인 (Supabase Edge Function)
 // @ts-ignore: 'Deno' is not defined in Vite/Node.js environment
@@ -15,52 +21,6 @@ const TMDB_API_KEY = isDeno
   : import.meta.env.VITE_TMDB_API_KEY || ''
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
-
-interface TMDBMovie {
-  id: number
-  title?: string // Movie용
-  name?: string // TV용
-  original_title?: string // Movie 원제
-  original_name?: string // TV 원제
-  overview: string
-  poster_path: string
-  backdrop_path?: string // 배경 이미지
-  release_date?: string // Movie용
-  first_air_date?: string // TV용
-  last_air_date?: string // TV 마지막 방영일
-  vote_average: number
-  vote_count?: number
-  popularity?: number
-  genre_ids: number[]
-  imdb_id?: string
-  original_language?: string
-  production_countries?: Array<{ iso_3166_1: string; name: string }>
-  // TV 전용 필드
-  number_of_seasons?: number
-  number_of_episodes?: number
-  networks?: Array<{ id: number; name: string }>
-}
-
-interface TMDBGenre {
-  id: number
-  name: string
-}
-
-interface TMDBWatchProvider {
-  provider_id: number
-  provider_name: string
-  logo_path: string
-}
-
-interface TMDBWatchProvidersResponse {
-  results: {
-    KR?: {
-      flatrate?: TMDBWatchProvider[] // 구독 서비스
-      buy?: TMDBWatchProvider[] // 구매
-      rent?: TMDBWatchProvider[] // 대여
-    }
-  }
-}
 
 /**
  * TMDB Search API로 콘텐츠 검색 (제목 기반)
@@ -418,18 +378,13 @@ async function fetchTVShowById(tmdbId: number): Promise<TMDBMovie | null> {
  * TMDB 영화/TV ID로 상세 정보 가져오기 (append_to_response 활용)
  * external_ids, credits, videos 등을 한 번에 가져옴
  */
-interface TMDBKeyword {
-  id: number
-  name: string
-}
-
 async function getContentDetailsFromTMDB(
   tmdbId: number,
   contentType: 'movie' | 'tv' = 'movie'
 ): Promise<{
   imdbId: string | null
-  credits?: any
-  videos?: any
+  credits?: unknown
+  videos?: unknown
   genres?: TMDBGenre[]
   keywords?: TMDBKeyword[]
   title?: string
@@ -645,14 +600,14 @@ async function saveContentToSupabase(
 ): Promise<Content | null> {
   try {
     // [기존 로직] 콘텐츠 타입 결정 (selectedGenre 우선)
-    let contentType: 'movie' | 'tv' = 'movie';
+    let contentType: 'movie' | 'tv' = 'movie'
     if (selectedGenre === '영화') {
-      contentType = 'movie';
+      contentType = 'movie'
     } else if (selectedGenre === '애니메이션' || selectedGenre === '드라마' || selectedGenre === '예능') {
-      contentType = 'tv';
+      contentType = 'tv'
     } else {
-      const isTVContent = movie.genre_ids.includes(18) || movie.genre_ids.includes(16) || movie.genre_ids.includes(10770);
-      contentType = isTVContent ? 'tv' : 'movie';
+      const isTVContent = movie.genre_ids.includes(18) || movie.genre_ids.includes(16) || movie.genre_ids.includes(10770)
+      contentType = isTVContent ? 'tv' : 'movie'
     }
 
     // [최적화] 한국어/영어 상세 정보 및 OTT 정보를 병렬로 가져오기
@@ -664,17 +619,17 @@ async function saveContentToSupabase(
       fetch(
         `${TMDB_BASE_URL}/${endpoint}/${movie.id}?api_key=${TMDB_API_KEY}&append_to_response=keywords&language=en-US`
       ).catch(() => null), // 영어 정보 실패해도 계속 진행
-      getWatchProvidersFromTMDB(movie.id, contentType)
-    ]);
-    
+      getWatchProvidersFromTMDB(movie.id, contentType),
+    ])
+
     // 한국어 데이터 처리
     if (!responseKo || !responseKo.ok) {
       console.warn(`[상세 정보 누락] ID: ${movie.id}`)
       return null
     }
-    
+
     const dataKo = await responseKo.json()
-    
+
     // 한국어 키워드 파싱
     const keywordsRawKo = dataKo.keywords
     let keywordsKo: TMDBKeyword[] = []
@@ -685,29 +640,23 @@ async function saveContentToSupabase(
         keywordsKo = keywordsRawKo.keywords
       }
     }
-    
-    const detailsKo = {
+
+    const detailsKo: TMDBDetails['ko'] = {
       imdbId: dataKo.external_ids?.imdb_id || null,
-      credits: dataKo.credits,
-      videos: dataKo.videos,
       genres: Array.isArray(dataKo.genres) ? dataKo.genres : [],
       keywords: keywordsKo,
       title: contentType === 'tv' ? dataKo.name : dataKo.title,
       description: dataKo.overview,
     }
-    
+
     // 영어 데이터 처리 (선택적)
-    let detailsEn: {
-      title?: string
-      description?: string
-      keywords?: TMDBKeyword[]
-    } | null = null
-    
+    let detailsEn: TMDBDetails['en'] = null
+
     if (responseEn) {
       if (responseEn.ok) {
         try {
           const dataEn = await responseEn.json()
-          
+
           // 영어 키워드 파싱
           const keywordsRawEn = dataEn.keywords
           let keywordsEn: TMDBKeyword[] = []
@@ -718,7 +667,7 @@ async function saveContentToSupabase(
               keywordsEn = keywordsRawEn.keywords
             }
           }
-          
+
           detailsEn = {
             title: contentType === 'tv' ? dataEn.name : dataEn.title,
             description: dataEn.overview,
@@ -737,16 +686,13 @@ async function saveContentToSupabase(
     } else {
       console.warn(`[영어 데이터 요청 실패] ID: ${movie.id} - 네트워크 오류 또는 요청 미완료`)
     }
-    
-    const details = detailsKo // 메인 로직은 한국어 데이터 기준
+
     let ottProviders = rawOttProviders
-    
-    const imdbId = details?.imdbId || null;
 
     // [필터링] OTT 제공자가 없으면 저장하지 않음 (시청 불가능한 콘텐츠 제외)
     if ((!ottProviders || ottProviders.length === 0) && !options.forceSaveOTT) {
-      console.log(`[OTT 없음] 저장 건너뜀: ${movie.title || movie.name} (ID: ${movie.id})`);
-      return null;
+      console.log(`[OTT 없음] 저장 건너뜀: ${movie.title || movie.name} (ID: ${movie.id})`)
+      return null
     }
 
     if ((!ottProviders || ottProviders.length === 0) && options.forceSaveOTT) {
@@ -755,424 +701,125 @@ async function saveContentToSupabase(
           provider_id: -1,
           provider_name: '수동 추가',
         },
-      ];
+      ]
     }
 
     // [추가] 임베딩 생성 (줄거리를 벡터로 변환)
-    const textToEmbed = movie.overview || movie.title || movie.name || '';
-    let embedding: number[] | null = null;
+    const textToEmbed = movie.overview || movie.title || movie.name || ''
+    let embedding: number[] | null = null
 
     if (textToEmbed) {
       try {
         // 텍스트 길이 제한 (512자) - embed 함수와 동일
-        const truncatedText = textToEmbed.slice(0, 512);
-        
-        const { data: embedData, error: embedError } = await supabase.functions.invoke(
-          'embed',
-          { body: { text: truncatedText } }
-        );
-        
+        const truncatedText = textToEmbed.slice(0, 512)
+
+        const { data: embedData, error: embedError } = await supabase.functions.invoke('embed', {
+          body: { text: truncatedText },
+        })
+
         if (embedError) {
-          console.error(`[임베딩 에러] (ID: ${movie.id}):`, embedError);
-          throw embedError;
+          console.error(`[임베딩 에러] (ID: ${movie.id}):`, embedError)
+          throw embedError
         }
-        
+
         if (!embedData || !embedData.vector) {
-          console.warn(`[임베딩 응답 없음] (ID: ${movie.id})`);
+          console.warn(`[임베딩 응답 없음] (ID: ${movie.id})`)
         } else {
-          embedding = embedData.vector;
-          const vectorSize = Array.isArray(embedding) ? embedding.length : 0;
-          console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${vectorSize})`);
+          embedding = embedData.vector
+          const vectorSize = Array.isArray(embedding) ? embedding.length : 0
+          console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${vectorSize})`)
         }
-      } catch (e: any) {
-        console.error(`[임베딩 실패] (ID: ${movie.id}, 제목: ${movie.title || movie.name}):`, e.message || e);
+      } catch (e: unknown) {
+        const error = e instanceof Error ? e.message : String(e)
+        console.error(`[임베딩 실패] (ID: ${movie.id}, 제목: ${movie.title || movie.name}):`, error)
         // 임베딩 실패해도 콘텐츠는 저장 (vector는 null)
-        embedding = null;
+        embedding = null
       }
     }
 
-    // [수정] 태그 생성 로직 분리 (Ko / En)
-    const genreIdSet = new Set<number>(movie.genre_ids || [])
-    if (details?.genres) {
-      details.genres.forEach((genre: TMDBGenre) => {
-        if (typeof genre?.id === 'number') {
-          genreIdSet.add(genre.id)
-        }
-      })
+    // 어댑터 함수를 사용하여 TMDB 데이터를 Content 타입으로 변환
+    const details: TMDBDetails = {
+      ko: detailsKo,
+      en: detailsEn,
     }
 
-    const genreIds = Array.from(genreIdSet)
-
-    // 1. 장르 태그 (기본) - 한국어와 영어 분리
-    let tagsKo: string[] = genreIds.map((id) => genreMapKo[id] || '').filter(Boolean)
-    let tagsEn: string[] = genreIds.map((id) => genreMapEn[id] || '').filter(Boolean)
-
-    // 복합 태그 분리 (예: "Action & Adventure" → ["Action", "Adventure"])
-    tagsKo = tagsKo.flatMap(tag => 
-      tag.includes('&') 
-        ? tag.split('&').map(t => t.trim()).filter(Boolean)
-        : tag
-    )
-    tagsEn = tagsEn.flatMap(tag => 
-      tag.includes('&') 
-        ? tag.split('&').map(t => t.trim()).filter(Boolean)
-        : tag
-    )
-    
-    // 영문 태그를 한글로 번역 (한국어 태그에 추가)
-    const tagTranslation: Record<string, string> = {
-      // 장르
-      'Action': '액션',
-      'Adventure': '모험',
-      'Animation': '애니메이션',
-      'Comedy': '코미디',
-      'Crime': '범죄',
-      'Documentary': '다큐멘터리',
-      'Drama': '드라마',
-      'Family': '가족',
-      'Fantasy': '판타지',
-      'History': '역사',
-      'Horror': '공포',
-      'Music': '음악',
-      'Mystery': '미스터리',
-      'Romance': '로맨스',
-      'Science Fiction': 'SF',
-      'Sci-Fi': 'SF',
-      'Thriller': '스릴러',
-      'War': '전쟁',
-      'Western': '서부',
-      'Reality': '리얼리티',
-      'Talk Show': '토크쇼',
-      'News': '뉴스',
-      'War & Politics': '전쟁·정치',
-      'Action & Adventure': '액션',
-      'Sci-Fi & Fantasy': 'SF',
-      'Soap': '연속극',
-      'Kids': '키즈',
-      // TV 타입
-      'TV Movie': 'TV영화',
-    }
-    
-    // 영어 태그를 한국어로 번역하여 한국어 태그에 추가
-    tagsEn.forEach(tag => {
-      const translated = tagTranslation[tag]
-      if (translated && !tagsKo.includes(translated)) {
-        tagsKo.push(translated)
-      }
+    const contentData = tmdbToContent(movie, details, ottProviders, {
+      selectedGenre,
+      genreMapKo,
+      genreMapEn,
+      moodIds,
+      forceMoodTags: options.forceMoodTags,
     })
-    
-    // [키워드 태그] TMDB 키워드 기반 태그 보강
-    
-    // (1) 한국어 키워드 처리 - 한국어 태그에 추가
-    if (details?.keywords && details.keywords.length > 0) {
-      const keywordTranslation: Record<string, string> = {
-        'historical drama': '사극',
-        'historical fiction': '사극',
-        'history': '역사',
-        'alternate history': '퓨전 사극',
-        'alternate past': '퓨전 사극',
-        'sageuk': '사극',
-        'fusion sageuk': '퓨전 사극',
-        'period drama': '사극',
-        'ancient korea': '사극',
-        'martial arts': '무협',
-        'warrior': '무협',
-        'sword fight': '검술',
-        'sword': '검술',
-        'politics': '정치',
-        'political intrigue': '정치',
-        'power struggle': '정치',
-        'romance': '로맨스',
-        'love': '로맨스',
-        'assassin': '암살',
-        'rebellion': '혁명',
-        'royalty': '왕실',
-        'kingdom': '왕권',
-        'court': '궁중',
-        'conspiracy': '음모',
-      }
 
-      const keywordTags = new Set<string>()
-
-      details.keywords.forEach((keyword) => {
-        if (!keyword?.name) return
-
-        // 한국어 태그는 번역해서 추가
-        const normalized = keyword.name.trim().toLowerCase()
-        if (!normalized) return
-
-        const translated =
-          keywordTranslation[normalized] ||
-          (normalized.includes('romance') ? '로맨스' : null) ||
-          (normalized.includes('histor') ? '사극' : null) ||
-          (normalized.includes('martial') ? '무협' : null) ||
-          (normalized.includes('sword') ? '검술' : null) ||
-          (normalized.includes('politic') ? '정치' : null) ||
-          (normalized.includes('love') ? '로맨스' : null)
-
-        if (translated) {
-          keywordTags.add(translated)
-        }
-      })
-
-      if (keywordTags.size > 0) {
-        tagsKo = [...tagsKo, ...keywordTags]
-      }
+    if (!contentData) {
+      return null
     }
 
-    // (2) 영어 키워드 처리 - 영어 태그에 추가 (detailsEn 사용)
-    if (detailsEn?.keywords && detailsEn.keywords.length > 0) {
-      detailsEn.keywords.forEach((keyword) => {
-        if (keyword?.name) {
-          tagsEn.push(keyword.name) // 영어 원문 그대로 추가
-        }
-      })
+    // 임베딩 벡터 추가
+    const contentDataWithVector = {
+      ...contentData,
+      vector: embedding,
     }
-
-    // [무드 태그] 선택된 무드를 기반으로 태그 추가
-    const moodTagOrder: string[] = []
-
-    if (Array.isArray(moodIds) && moodIds.length > 0) {
-      const moodTagsToAddKo = new Set<string>()
-      const moodTagsToAddEn = new Set<string>()
-      
-      moodIds.forEach((moodId) => {
-        const relatedGenres = MOOD_TO_TMDB_GENRE[moodId] || []
-        const hasMatchingGenre =
-          relatedGenres.length === 0 ||
-          relatedGenres.some((genreId) => movie.genre_ids?.includes(genreId))
-
-        if (options.forceMoodTags || hasMatchingGenre) {
-          const moodDerivedTags = moodsToImdbTags([moodId]) // ['Romance', 'Drama'] 등 반환 가정
-          
-          // 영어 태그 추가
-          moodDerivedTags.forEach((tag) => {
-            moodTagsToAddEn.add(tag)
-            if (!moodTagOrder.includes(tag)) {
-              moodTagOrder.push(tag)
-            }
-          })
-
-          // 한국어 태그 번역 추가
-          const translatedMoodTags = moodDerivedTags.map(tag => tagTranslation[tag] || tag)
-          translatedMoodTags.forEach((tag) => {
-            moodTagsToAddKo.add(tag)
-          })
-        }
-      })
-
-      if (moodTagsToAddEn.size > 0) {
-        tagsEn = [...tagsEn, ...moodTagsToAddEn]
-      }
-      if (moodTagsToAddKo.size > 0) {
-        tagsKo = [...tagsKo, ...moodTagsToAddKo]
-      }
-    }
-
-    // 4. 중복 제거 및 정제
-    tagsKo = [...new Set(tagsKo)]
-    tagsEn = [...new Set(tagsEn)]
-
-    // 무드 태그 순서 적용 (한국어 태그에만)
-    if (moodTagOrder.length > 0) {
-      const moodTagsKo = moodTagOrder.map(tag => tagTranslation[tag] || tag).filter(tag => tagsKo.includes(tag))
-      const otherTagsKo = tagsKo.filter((tag) => !moodTagsKo.includes(tag))
-      tagsKo = [...moodTagsKo, ...otherTagsKo]
-    }
-
-    // [개선] 태그에서 장르 추론 및 정리
-    const genreMapForSave: Record<string, number> = GENRE_TO_TMDB_ID;
-    let contentGenre = '영화'; // 기본값
-    
-    // 장르 키워드 매핑 (태그에서 장르 추론용 - 이미 번역된 한글 태그)
-    const genreKeywords: Record<string, string[]> = {
-      '애니메이션': ['애니메이션'],
-      '드라마': ['드라마'],
-      '예능': ['리얼리티', '토크쇼'],
-    };
-    
-    // 태그에서 장르 감지 (한국어 태그 기준)
-    let detectedGenre: string | null = null;
-    for (const [genre, keywords] of Object.entries(genreKeywords)) {
-      if (keywords.some(keyword => tagsKo.includes(keyword))) {
-        detectedGenre = genre;
-        // 태그에서 장르 키워드 제거 (한국어만)
-        tagsKo = tagsKo.filter(tag => !keywords.includes(tag));
-        break;
-      }
-    }
-    
-    // [추가] 태그가 비었을 경우 기본 태그 추가 (장르 기반)
-    if (tagsKo.length === 0 && tagsEn.length === 0) {
-      // selectedGenre 또는 감지된 장르를 기본 태그로 사용
-      const baseGenre = selectedGenre || detectedGenre || '영화';
-      
-      // 장르별 기본 태그 추가 (한국어와 영어 모두)
-      if (baseGenre === '예능') {
-        tagsKo = ['코미디', '리얼리티'];
-        tagsEn = ['Comedy', 'Reality'];
-      } else if (baseGenre === '애니메이션') {
-        tagsKo = ['애니메이션'];
-        tagsEn = ['Animation'];
-      } else if (baseGenre === '드라마') {
-        tagsKo = ['드라마'];
-        tagsEn = ['Drama'];
-      } else {
-        // 영화는 평점 기반 태그 추가
-        if (movie.vote_average >= 7) {
-          tagsKo = ['명작'];
-          tagsEn = ['Classic'];
-        } else {
-          tagsKo = ['영화'];
-          tagsEn = ['Movie'];
-        }
-      }
-      
-      console.log(`[기본 태그 추가] ${movie.title || movie.name}: KO=${tagsKo.join(', ')}, EN=${tagsEn.join(', ')}`);
-    }
-    
-    // 장르 결정 (우선순위: selectedGenre > 태그에서 감지 > genre_ids로 판단)
-    if (selectedGenre) {
-      if (selectedGenre === '영화') {
-        contentGenre = '영화';
-      } else if (selectedGenre === '예능') {
-        // 예능은 무조건 예능으로 저장 (TMDB에서 genre_id로 구분 안 됨)
-        contentGenre = '예능';
-      } else if (selectedGenre === '애니메이션') {
-        // 애니메이션도 무조건 애니메이션으로 저장
-        contentGenre = '애니메이션';
-      } else if (selectedGenre === '드라마') {
-        // 드라마도 무조건 드라마로 저장
-        contentGenre = '드라마';
-      } else if (genreMapForSave[selectedGenre] && movie.genre_ids.includes(genreMapForSave[selectedGenre])) {
-        contentGenre = selectedGenre;
-      } else if (detectedGenre) {
-        contentGenre = detectedGenre; // 태그에서 감지된 장르 사용
-      } else {
-        // 선택한 장르가 콘텐츠에 없으면, genre_ids로 판단
-        if (movie.genre_ids.includes(18)) contentGenre = '드라마';
-        else if (movie.genre_ids.includes(16)) contentGenre = '애니메이션';
-        else if (movie.genre_ids.includes(10770)) contentGenre = '예능';
-      }
-    } else {
-      // selectedGenre가 없으면 태그 또는 genre_ids로 판단
-      if (detectedGenre) {
-        contentGenre = detectedGenre;
-      } else if (movie.genre_ids.includes(18)) {
-        contentGenre = '드라마';
-      } else if (movie.genre_ids.includes(16)) {
-        contentGenre = '애니메이션';
-      } else if (movie.genre_ids.includes(10770)) {
-        contentGenre = '예능';
-      }
-    }
-
-    // [수정] 제목과 줄거리 - details에서 가져오거나 movie에서 fallback
-    const contentTitle = details?.title || movie.title || movie.name || '';
-    
-    // 영어 제목 Fallback 우선순위:
-    // 1. 영어 상세 제목 -> 2. 원제(Original Title) -> 3. 한국어 제목(최후의 수단)
-    const contentTitleEn = detailsEn?.title || movie.original_title || movie.original_name || contentTitle;
-    
-    const contentDescription = details?.description || movie.overview || null;
-    // 영어 줄거리가 없으면 null (UI에서 한국어를 보여주거나 'No description' 처리)
-    const contentDescriptionEn = detailsEn?.description || null;
-
-    if (!contentTitle) {
-      console.warn('제목이 없는 콘텐츠:', movie.id);
-      return null;
-    }
-
-    const dateString = movie.release_date || movie.first_air_date || '';
-    const year = dateString ? parseInt(dateString.split('-')[0]) : null;
-
-    // [추가] 장르 영어 번역
-    const genreTranslation: Record<string, string> = {
-      '영화': 'Movie',
-      '드라마': 'Drama',
-      '애니메이션': 'Animation',
-      '예능': 'Variety Show',
-    }
-    const contentGenreEn = genreTranslation[contentGenre] || contentGenre
-
-    const contentData = {
-      title: contentTitle,
-      title_en: contentTitleEn, // [수정] Fallback 적용
-      description: contentDescription,
-      description_en: contentDescriptionEn, // 영어 줄거리 (없으면 null)
-      poster_url: movie.poster_path
-        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-        : null,
-      imdb_id: imdbId,
-      imdb_rating: movie.vote_average ? movie.vote_average / 2 : null,
-      year: year,
-      genre: contentGenre,
-      genre_en: contentGenreEn, // [추가] 영어 장르
-      tags: tagsKo,      // 한국어 태그
-      tags_en: tagsEn,   // 영어 태그
-      url: imdbId ? `https://www.imdb.com/title/${imdbId}` : null,
-      ott_providers: ottProviders && ottProviders.length > 0 ? ottProviders : undefined,
-      vector: embedding, // 임베딩 벡터 추가 (null 가능)
-    };
 
     // [최적화] 중복 저장 방지
     // imdb_id가 있으면 imdb_id로 upsert, 없으면 title+year로 중복 체크
+    const imdbId = details.ko.imdbId
     if (imdbId) {
       // imdb_id가 있는 경우: imdb_id로 upsert
       const { data, error } = await supabase
         .from('contents')
-        .upsert(contentData, {
+        .upsert(contentDataWithVector, {
           onConflict: 'imdb_id',
           ignoreDuplicates: false,
         })
         .select()
-        .single();
+        .single()
 
       if (error) {
-        console.error(`콘텐츠 저장 실패: ${contentTitle}`, error.message);
-        return null;
+        console.error(`콘텐츠 저장 실패: ${contentData.title}`, error.message)
+        return null
       }
 
-      return data;
+      return data
     } else {
       // imdb_id가 없는 경우: title+year로 기존 콘텐츠 확인
       const { data: existingContent } = await supabase
         .from('contents')
         .select('id')
-        .eq('title', contentTitle)
-        .eq('year', year)
-        .maybeSingle();
+        .eq('title', contentData.title)
+        .eq('year', contentData.year)
+        .maybeSingle()
 
       if (existingContent) {
         // 기존 콘텐츠가 있으면 업데이트
         const { data, error } = await supabase
           .from('contents')
-          .update(contentData)
+          .update(contentDataWithVector)
           .eq('id', existingContent.id)
           .select()
-          .single();
+          .single()
 
         if (error) {
-          console.error(`콘텐츠 업데이트 실패: ${contentTitle}`, error.message);
-          return null;
+          console.error(`콘텐츠 업데이트 실패: ${contentData.title}`, error.message)
+          return null
         }
 
-        console.log(`[중복 방지] 기존 콘텐츠 업데이트: ${contentTitle} (${year})`);
-        return data;
+        console.log(`[중복 방지] 기존 콘텐츠 업데이트: ${contentData.title} (${contentData.year})`)
+        return data
       } else {
         // 기존 콘텐츠가 없으면 새로 삽입
         const { data, error } = await supabase
           .from('contents')
-          .insert(contentData)
+          .insert(contentDataWithVector)
           .select()
-          .single();
+          .single()
 
         if (error) {
-          console.error(`콘텐츠 삽입 실패: ${contentTitle}`, error.message);
-          return null;
+          console.error(`콘텐츠 삽입 실패: ${contentData.title}`, error.message)
+          return null
         }
 
-        return data;
+        return data
       }
     }
   } catch (error) {
