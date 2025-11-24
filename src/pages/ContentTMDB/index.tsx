@@ -217,8 +217,8 @@ export default function ContentTMDB() {
                   setWriter(writerCandidate?.name ?? null)
                 }
               }
-            }).catch((err) => {
-              console.warn('Credits fetch 실패:', err)
+            }).catch(() => {
+              // Credits fetch 실패 시 무시
             })
           }
 

@@ -70,13 +70,6 @@ async function fetchMoviesFromTMDB(
     const isTV = genre === '드라마' || genre === '예능' || genre === '애니메이션'
     const endpoint = isTV ? 'discover/tv' : 'discover/movie'
 
-    console.log('[TMDB 검색 시작]', {
-      genre,
-      moods,
-      endpoint,
-      isTV,
-    })
-
     // TMDB Discover API로 콘텐츠 검색 (고급 필터링 옵션 활용)
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
@@ -89,12 +82,6 @@ async function fetchMoviesFromTMDB(
 
     // 무드를 TMDB 파라미터로 변환 (키워드와 정렬 기준을 가져옴)
     const moodParams = moodsToTMDBParams(moods)
-    console.log('[무드 파라미터]', {
-      moods,
-      genres: moodParams.genres, // 참고용 (사용 안 함)
-      keywords: moodParams.keywords, // 사용할 키워드
-      sortBy: moodParams.sortBy,
-    })
 
     // 1. [장르 필터] 적용
     const genreIdsToFilter = new Set<number>()
@@ -110,7 +97,6 @@ async function fetchMoviesFromTMDB(
     // (예: 로맨스 무드 '01' -> 장르 ID 10749)
     if (!isTV && moodParams.genres && moodParams.genres.length > 0) {
       moodParams.genres.forEach(id => genreIdsToFilter.add(id))
-      console.log('[무드 기반 장르 필터 적용]', { genre, moodGenreIds: moodParams.genres })
     }
 
     // '예능'은 with_type으로 필터링되므로 여기서는 추가 ID 없음
@@ -119,9 +105,6 @@ async function fetchMoviesFromTMDB(
     if (genreIdsToFilter.size > 0) {
       const genreIdString = Array.from(genreIdsToFilter).join('|')
       params.append('with_genres', genreIdString)
-      console.log('[장르 필터 적용]', { genre, genreIds: genreIdString })
-    } else {
-      console.log('[장르 필터] 없음 (영화+무드조합없음 또는 예능)', { genre })
     }
 
     // 2. [무드 필터] 적용 (키워드 기반)
@@ -132,18 +115,10 @@ async function fetchMoviesFromTMDB(
       // 여러 키워드를 OR 조건(|)으로 연결하여 더 넓은 범위 검색
       const keywordString = moodParams.keywords.join('|')
       params.append('with_keywords', keywordString)
-      console.log('[무드 필터 적용]', {
-        keywordIds: moodParams.keywords,
-        keywordString,
-        논리: 'OR (|)',
-      })
-    } else {
-      console.log('[무드 필터] 없음 또는 예능 (키워드 필터 제외)')
     }
 
     // 3. [정렬 기준] 적용
     params.append('sort_by', moodParams.sortBy || 'vote_average.desc')
-    console.log('[정렬 기준]', moodParams.sortBy || 'vote_average.desc')
     
     // 한국 제작 작품 우선 (선택사항 - 필요시 활성화)
     // params.append('with_origin_country', 'KR') // 주석 처리 - 검색 범위 확대
@@ -159,23 +134,18 @@ async function fetchMoviesFromTMDB(
       if (genre === '예능') {
         // 예능은 Reality(3) 또는 Talk Show(5) 타입
         params.append('with_type', '3|5')
-        console.log('[TV 타입 필터] 예능', { with_type: '3|5 (Reality|Talk Show)' })
-      } else if (genre === '드라마') {
-        console.log('[TV 타입 필터] 없음 (드라마는 장르 ID로만 필터링)')
       }
     } else {
       params.append('primary_release_date.gte', `${startYear}-01-01`)
     }
 
     const requestUrl = `${TMDB_BASE_URL}/${endpoint}?${params.toString()}`
-    console.log('[TMDB 요청 URL]', requestUrl)
 
     const response = await fetch(requestUrl)
 
     if (!response.ok) {
       // 429 에러 (Rate Limit) 처리
       if (response.status === 429) {
-        console.warn('[TMDB API] Rate Limit 초과, 잠시 후 재시도')
         return []
       }
       console.error('[TMDB API 오류]', {
@@ -188,104 +158,50 @@ async function fetchMoviesFromTMDB(
     }
 
     const data = await response.json()
-    console.log('[TMDB 검색 결과]', {
-      totalResults: data.total_results || 0,
-      resultsCount: data.results?.length || 0,
-      page: data.page || 1,
-      totalPages: data.total_pages || 0,
-    })
     
     // 결과가 없으면 필터를 완화하여 재검색 (엔드포인트는 유지)
     if (!data.results || data.results.length === 0) {
-      console.warn('[검색 결과 없음] 필터 완화하여 재검색...', {
-        원인분석: {
-          장르: selectedGenreId ? `${genre} (ID: ${selectedGenreId})` : '없음',
-          무드장르: (moodParams.genres && moodParams.genres.length > 0) ? moodParams.genres : '없음',
-          키워드: (moodParams.keywords && moodParams.keywords.length > 0) ? moodParams.keywords[0] : '없음',
-            최소평점: '5.0',
-            최소평가수: '10',
-          기간필터: isTV ? `${startYear}-01-01 이후` : `${startYear}-01-01 이후`,
-          엔드포인트: endpoint, // 중요: TV는 TV, Movie는 Movie로 유지
-        },
-      })
-      
       // 최소 평점 필터 제거
       params.delete('vote_average.gte')
-      console.log('[재검색] 최소 평점 필터 제거')
       
       // 최소 평가 수 완화 (10 -> 5)
       params.set('vote_count.gte', '5')
-      console.log('[재검색] 최소 평가 수 완화 (10 -> 5)')
       
       // 최근 10년 제한 제거
       if (isTV) {
         params.delete('first_air_date.gte')
-        console.log('[재검색] TV 방영일 필터 제거')
       } else {
         params.delete('primary_release_date.gte')
-        console.log('[재검색] 영화 개봉일 필터 제거')
       }
       
       // 중요: 엔드포인트는 변경하지 않음 (드라마는 TV, 영화는 Movie로 유지)
       const retryUrl = `${TMDB_BASE_URL}/${endpoint}?${params.toString()}`
-      console.log('[재검색 요청 URL]', retryUrl, {
-        엔드포인트확인: endpoint,
-        장르: genre,
-        isTV: isTV,
-      })
       
       const retryResponse = await fetch(retryUrl)
       
       if (retryResponse.ok) {
         const retryData = await retryResponse.json()
-        console.log('[재검색 결과]', {
-          totalResults: retryData.total_results || 0,
-          resultsCount: retryData.results?.length || 0,
-          엔드포인트: endpoint,
-        })
         
         if (retryData.results && retryData.results.length > 0) {
-          console.log('[재검색 성공] 필터 완화로 결과 찾음')
           return retryData.results.slice(0, limit) || []
         } else {
           // 키워드 필터만 제거하고 재시도 (장르 필터는 유지)
           if (moodParams.keywords && moodParams.keywords.length > 0) {
-            console.warn('[재검색 실패] 키워드 필터 제거하고 재시도...')
-            
             // 키워드 필터 제거 (너무 제한적일 수 있음)
             params.delete('with_keywords')
             
             const keywordRetryUrl = `${TMDB_BASE_URL}/${endpoint}?${params.toString()}`
-            console.log('[키워드 제거 후 재검색]', keywordRetryUrl)
             
             const keywordRetryResponse = await fetch(keywordRetryUrl)
             if (keywordRetryResponse.ok) {
               const keywordRetryData = await keywordRetryResponse.json()
               if (keywordRetryData.results && keywordRetryData.results.length > 0) {
-                console.log('[키워드 제거 후 재검색 성공]', { 결과수: keywordRetryData.results.length })
                 return keywordRetryData.results.slice(0, limit) || []
               }
             }
           }
-          
-          console.error('[재검색 실패] 모든 필터 완화 후에도 결과 없음', {
-            최종필터: {
-              엔드포인트: endpoint,
-              장르: selectedGenreId ? selectedGenreId.toString() : '없음',
-              키워드: moodParams.keywords ? moodParams.keywords.join('|') : '없음',
-              최소평가수: '5 (완화됨)',
-            },
-          })
         }
-      } else {
-        console.error('[재검색 요청 실패]', retryResponse.status)
       }
-    } else {
-      console.log('[검색 성공]', { 
-        결과수: data.results.length,
-        엔드포인트: endpoint,
-        장르: genre,
-      })
     }
     
     // [최적화] 결과가 부족하면 여러 페이지 검색
@@ -297,14 +213,11 @@ async function fetchMoviesFromTMDB(
       currentPage++
       params.set('page', currentPage.toString())
       
-      console.log(`[추가 페이지 검색] page ${currentPage} (현재: ${allResults.length}/${limit}개)`)
-      
       const nextResponse = await fetch(`${TMDB_BASE_URL}/${endpoint}?${params.toString()}`)
       if (nextResponse.ok) {
         const nextData = await nextResponse.json()
         if (nextData.results && nextData.results.length > 0) {
           allResults = [...allResults, ...nextData.results]
-          console.log(`[페이지 ${currentPage} 추가] 총 ${allResults.length}개`)
         } else {
           break
         }
@@ -327,11 +240,6 @@ async function fetchTVShowById(tmdbId: number): Promise<TMDBMovie | null> {
     )
 
     if (!response.ok) {
-      console.warn('[TMDB TV 상세 호출 실패]', {
-        tmdbId,
-        status: response.status,
-        statusText: response.statusText,
-      })
       return null
     }
 
@@ -431,7 +339,7 @@ async function getContentDetailsFromTMDB(
         titleEn = contentType === 'tv' ? dataEn.name : dataEn.title
         descriptionEn = dataEn.overview
       } catch (error) {
-        console.warn('영어 정보 파싱 실패:', error)
+        // 영어 정보 파싱 실패 시 무시
       }
     }
 
@@ -483,7 +391,6 @@ async function getWatchProvidersFromTMDB(
     )
 
     if (!response.ok) {
-      console.warn(`OTT 정보 가져오기 실패: ${response.status}`)
       return []
     }
 
@@ -624,7 +531,6 @@ async function saveContentToSupabase(
 
     // 한국어 데이터 처리
     if (!responseKo || !responseKo.ok) {
-      console.warn(`[상세 정보 누락] ID: ${movie.id}`)
       return null
     }
 
@@ -674,24 +580,15 @@ async function saveContentToSupabase(
             keywords: keywordsEn,
           }
         } catch (error) {
-          console.warn(`[영어 정보 파싱 실패] ID: ${movie.id}:`, error)
-        }
-      } else {
-        // [추가] 실패 로그 - Rate Limit 등 원인 파악을 위해
-        console.warn(`[영어 데이터 실패] ID: ${movie.id}, Status: ${responseEn.status} ${responseEn.statusText}`)
-        if (responseEn.status === 429) {
-          console.warn(`[Rate Limit 감지] ID: ${movie.id} - 잠시 대기 후 재시도 가능`)
+          // 영어 정보 파싱 실패 시 무시
         }
       }
-    } else {
-      console.warn(`[영어 데이터 요청 실패] ID: ${movie.id} - 네트워크 오류 또는 요청 미완료`)
     }
 
     let ottProviders = rawOttProviders
 
     // [필터링] OTT 제공자가 없으면 저장하지 않음 (시청 불가능한 콘텐츠 제외)
     if ((!ottProviders || ottProviders.length === 0) && !options.forceSaveOTT) {
-      console.log(`[OTT 없음] 저장 건너뜀: ${movie.title || movie.name} (ID: ${movie.id})`)
       return null
     }
 
@@ -722,12 +619,8 @@ async function saveContentToSupabase(
           throw embedError
         }
 
-        if (!embedData || !embedData.vector) {
-          console.warn(`[임베딩 응답 없음] (ID: ${movie.id})`)
-        } else {
+        if (embedData && embedData.vector) {
           embedding = embedData.vector
-          const vectorSize = Array.isArray(embedding) ? embedding.length : 0
-          console.log(`[임베딩 성공] ${movie.title || movie.name} (벡터 크기: ${vectorSize})`)
         }
       } catch (e: unknown) {
         const error = e instanceof Error ? e.message : String(e)
@@ -804,7 +697,6 @@ async function saveContentToSupabase(
           return null
         }
 
-        console.log(`[중복 방지] 기존 콘텐츠 업데이트: ${contentData.title} (${contentData.year})`)
         return data
       } else {
         // 기존 콘텐츠가 없으면 새로 삽입
@@ -839,7 +731,6 @@ export async function fetchAndSaveRecommendations(
     // 1. TMDB에서 콘텐츠 목록 가져오기
     const movies = await fetchMoviesFromTMDB(genre, moods, 200); // 최대 200개까지 검색 (10페이지 × 20개)
     if (!movies || movies.length === 0) {
-        console.log(`[${genre}+${moods}] TMDB 검색 결과 없음`);
         return [];
     }
 
@@ -855,15 +746,8 @@ export async function fetchAndSaveRecommendations(
     // =====================================================================
     
     const savedContents: Content[] = []
-    
-    console.log(`[저장 시작] 총 ${movies.length}개 콘텐츠를 순차적으로 저장합니다...`)
 
     for (const [index, movie] of movies.entries()) {
-      // 진행 상황 로깅 (5개마다)
-      if (index % 5 === 0 && index > 0) {
-        console.log(`[진행 중] ${index}/${movies.length} 처리 완료`)
-      }
-
       const saved = await saveContentToSupabase(
         movie, 
         genre, 
@@ -882,9 +766,6 @@ export async function fetchAndSaveRecommendations(
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     }
-    
-    const ottFiltered = movies.length - savedContents.length
-    console.log(`[${genre}+${moods}] 저장 완료: ${savedContents.length} / ${movies.length}개 (OTT 없음/실패: ${ottFiltered}개)`)
 
     return savedContents
     
@@ -900,13 +781,11 @@ export async function importSpecificTVShows(
 ): Promise<Content[]> {
   try {
     if (!tmdbIds || tmdbIds.length === 0) {
-      console.warn('[특정 TV 수집] tmdbIds가 비어 있음')
       return []
     }
 
     const uniqueIds = Array.from(new Set(tmdbIds.filter(Boolean)))
     if (uniqueIds.length === 0) {
-      console.warn('[특정 TV 수집] 유효한 tmdbId 없음')
       return []
     }
 
@@ -917,7 +796,6 @@ export async function importSpecificTVShows(
     for (const tmdbId of uniqueIds) {
       const tvShow = await fetchTVShowById(tmdbId)
       if (!tvShow) {
-        console.warn(`[특정 TV 수집] TMDB ID ${tmdbId} 상세 정보 없음`)
         continue
       }
 
@@ -935,9 +813,6 @@ export async function importSpecificTVShows(
 
       if (saved) {
         results.push(saved)
-        console.log(`[특정 TV 수집] 저장 완료: ${saved.title} (ID: ${tmdbId})`)
-      } else {
-        console.warn(`[특정 TV 수집] 저장 실패: TMDB ID ${tmdbId}`)
       }
     }
 
@@ -957,7 +832,6 @@ async function getTMDBIdByImdbId(imdbId: string, contentType: 'movie' | 'tv' = '
     const response = await fetch(findUrl)
 
     if (!response.ok) {
-      console.warn(`[TMDB Find API 실패] IMDB: ${imdbId}, Status: ${response.status}`)
       return null
     }
 
@@ -985,11 +859,6 @@ async function fetchMovieById(tmdbId: number): Promise<TMDBMovie | null> {
     )
 
     if (!response.ok) {
-      console.warn('[TMDB Movie 상세 호출 실패]', {
-        tmdbId,
-        status: response.status,
-        statusText: response.statusText,
-      })
       return null
     }
 
@@ -1034,7 +903,6 @@ export async function updateContentByImdbId(imdbId: string, genre: string): Prom
     const tmdbId = await getTMDBIdByImdbId(imdbId, contentType)
 
     if (!tmdbId) {
-      console.warn(`[업데이트 실패] TMDB ID를 찾을 수 없음: ${imdbId}`)
       return false
     }
 
@@ -1047,7 +915,6 @@ export async function updateContentByImdbId(imdbId: string, genre: string): Prom
     }
 
     if (!contentData) {
-      console.warn(`[업데이트 실패] 상세 정보를 가져올 수 없음: TMDB ${tmdbId}`)
       return false
     }
 
@@ -1065,7 +932,6 @@ export async function updateContentByImdbId(imdbId: string, genre: string): Prom
     )
 
     if (saved) {
-      console.log(`[업데이트 완료] ${saved.title} (${saved.title_en || '영어 제목 없음'})`)
       return true
     }
 

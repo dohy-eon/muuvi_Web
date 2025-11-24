@@ -71,9 +71,7 @@ function LoginPrompt() {
       
       const redirectTo = `${window.location.origin}/mypage`
       
-      console.log('[Google 로그인 시도]', { redirectTo })
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
@@ -95,8 +93,6 @@ function LoginPrompt() {
           setErrorMessage(`${t.error}: ${error.message}`)
         }
         setIsLoading(false)
-      } else if (data) {
-        console.log('[Google OAuth 리디렉션 시작]', data)
       }
     } catch (error: any) {
       console.error('[Google 로그인 중 예외 발생]', error)

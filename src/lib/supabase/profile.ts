@@ -21,14 +21,6 @@ export async function saveProfile(
 
     if (existingProfile) {
       // 업데이트
-      console.log('[프로필 업데이트]', {
-        userId,
-        기존_장르: existingProfile.genre,
-        기존_무드: existingProfile.moods,
-        새_장르: data.genre,
-        새_무드: data.moods,
-      })
-      
       const { data: updated, error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -42,13 +34,6 @@ export async function saveProfile(
 
       profile = updated
       error = updateError
-      
-      if (updated) {
-        console.log('[프로필 업데이트 완료]', {
-          장르: updated.genre,
-          무드: updated.moods,
-        })
-      }
     } else {
       // 삽입
       const { data: inserted, error: insertError } = await supabase
@@ -137,8 +122,6 @@ export async function updateSubscribedOtts(
       error = updateError
     } else {
       // 프로필이 없으면 기본 프로필 생성 (OTT 정보만)
-      console.log('⚠️ 프로필이 없어서 기본 프로필을 생성합니다.')
-      
       const { data, error: insertError } = await supabase
         .from('profiles')
         .insert({
@@ -173,11 +156,9 @@ export async function updateSubscribedOtts(
     }
 
     if (!result || result.length === 0) {
-      console.warn('⚠️ 업데이트/생성된 레코드가 없습니다.')
       return false
     }
 
-    console.log('✅ OTT 구독 정보 업데이트/생성 성공:', result[0])
     return true
   } catch (error) {
     console.error('OTT 구독 정보 업데이트 중 오류:', error)

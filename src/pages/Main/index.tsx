@@ -196,7 +196,6 @@ export default function Main() {
           profile = updatedProfile ?? profile
           // 온보딩 데이터 사용 후 클리어 (한 번만 사용되도록)
           setOnboardingData(null)
-          console.log('[온보딩 데이터 처리 완료 및 클리어]')
         }
 
         // 로그인한 사용자의 경우 최신 프로필 정보 다시 가져오기 (subscribed_otts 포함)
@@ -213,17 +212,6 @@ export default function Main() {
           setProfile(profile)
           // 세션 스토리지에도 프로필 저장 (네비게이션 바 이동 시 복원용)
           saveProfileToStorage(profile)
-          
-          // 디버깅: 프로필 정보 전체 확인 (장르, 무드, 구독 정보)
-          console.log('[프로필 로드]', {
-            userId,
-            genre: profile.genre,
-            moods: profile.moods,
-            moodNames: profile.moods.map(id => MOOD_TABLE.ko[id as keyof typeof MOOD_TABLE.ko] || id),
-            hasSubscribedOtts: !!profile.subscribed_otts,
-            subscribedOtts: profile.subscribed_otts,
-            onboardingData: onboardingData ? { genre: onboardingData.genre, moods: onboardingData.moods } : null,
-          })
           
           // [추가] 병렬로 데이터 로드 (성능 개선)
           const [notInterestedIdsFromDb, contents] = await Promise.all([
@@ -332,8 +320,6 @@ export default function Main() {
         if (storedRecommendations && storedProfile) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[온보딩에서 메인 이동] 미리 로드된 데이터 사용:', parsed.length, '개')
-            
             // 미리 로드된 데이터 사용
             setRecommendations(parsed)
             setProfile(storedProfile)
@@ -353,7 +339,6 @@ export default function Main() {
       }
       
       // [추가] 미리 로드된 데이터가 없으면 즉시 데이터 로딩 시작
-      console.log('[온보딩에서 메인 이동] 미리 로드된 데이터 없음, 즉시 데이터 로딩 시작')
       void loadRecommendations()
     }
     
@@ -365,21 +350,9 @@ export default function Main() {
       navigationBarPaths.includes(currentPath) && 
       prevPath !== currentPath
     
-    console.log('[Main useEffect]', { 
-      currentPath, 
-      prevPath, 
-      isNavigationBarNavigation,
-      hasRecommendations: recommendations.length > 0,
-      hasProfile: !!profile,
-      hasOnboardingData: !!onboardingData,
-      shouldShowLoadingScreen
-    })
-    
     // [리팩토링] 1. 네비게이션 바 이동 감지 및 처리
     // 온보딩에서 넘어온 경우는 네비게이션 바 이동이 아니므로 건너뜀
     if (isNavigationBarNavigation && !shouldShowLoadingScreen) {
-      console.log('[네비게이션 바 이동] 감지됨 - 세션 데이터 복원 시도')
-      
       try {
         // 세션에서 추천 데이터 복원
         const storedRecommendations = sessionStorage.getItem('mainRecommendations')
@@ -388,8 +361,6 @@ export default function Main() {
         if (storedRecommendations) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[네비게이션 바 이동] 세션 데이터 복원 성공:', parsed.length, '개')
-            
             // 추천 데이터 복원
             setRecommendations(parsed)
             
@@ -414,7 +385,6 @@ export default function Main() {
       }
       
       // 세션 데이터가 없어도 기존 데이터 유지 (로드하지 않음)
-      console.log('[네비게이션 바 이동] 세션 데이터 없음, 기존 데이터 유지')
       setIsLoading(false)
       setShowSimpleLoading(false)
       setShowLoadingScreen(false)
@@ -426,7 +396,6 @@ export default function Main() {
     // [리팩토링] 2. 온보딩 데이터 처리 (새로운 추천이 필요한 경우)
     // [수정] 온보딩에서 넘어온 경우는 이미 위에서 처리했으므로 여기서는 건너뜀
     if (onboardingData && !shouldShowLoadingScreen) {
-      console.log('[온보딩 데이터 처리] 세션 초기화 및 새로 로드')
       sessionStorage.removeItem('mainRecommendations')
       sessionStorage.removeItem('mainProfile')
       setRecommendations([])
@@ -435,13 +404,10 @@ export default function Main() {
     
     // [리팩토링] 3. 기존 데이터가 있으면 유지 (온보딩이 아닐 때)
     if (recommendations.length > 0 && !onboardingData) {
-      console.log('[데이터 유지] 기존 추천 데이터 사용:', recommendations.length, '개')
-      
       // 프로필이 없으면 세션에서 복원 시도
       if (!profile) {
         const storedProfile = loadProfileFromStorage()
         if (storedProfile) {
-          console.log('[프로필 복원] 세션에서 프로필 복원')
           setProfile(storedProfile)
         }
       }
@@ -466,8 +432,6 @@ export default function Main() {
         if (storedRecommendations) {
           const parsed = JSON.parse(storedRecommendations) as Content[]
           if (parsed && parsed.length > 0) {
-            console.log('[세션 데이터 복원] 성공:', parsed.length, '개')
-            
             // 추천 데이터 복원
             setRecommendations(parsed)
             
@@ -505,13 +469,11 @@ export default function Main() {
       sessionStorage.setItem('prevPath', currentPath)
       
       // 데이터 로드 시작 (온보딩이 아닌 경우에만)
-      console.log('[데이터 로드 시작]', { currentPath, prevPath, onboardingData: !!onboardingData, shouldShowLoadingScreen })
       void loadRecommendations()
     } else {
       // 온보딩에서 넘어온 경우는 이미 위에서 데이터 로딩을 시작했으므로 경로만 업데이트
       prevPathRef.current = currentPath
       sessionStorage.setItem('prevPath', currentPath)
-      console.log('[온보딩에서 메인 이동] 데이터 로딩 이미 시작됨')
     }
   }, [location.pathname, loadRecommendations, onboardingData])
 

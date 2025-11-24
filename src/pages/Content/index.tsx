@@ -360,7 +360,6 @@ async function getCastAndCrew(
     if (!tmdbId && title) {
       tmdbId = await getTMDBIdByTitle(title, year, contentType)
       if (tmdbId) {
-        console.log(`[출연진 정보] 제목으로 TMDB ID 찾기 성공: ${title} (${year}) -> ${tmdbId}`)
       }
     }
     
@@ -658,7 +657,6 @@ export default function Content() {
               type: provider.type || 'flatrate' // 기본값: 정액제
             }))
             setOttProviders(fallbackProviders)
-            console.log('[OTT 정보] Supabase 저장 데이터 사용:', fallbackProviders.length, '개')
           } else {
             setOttProviders([])
           }
@@ -679,7 +677,6 @@ export default function Content() {
               url: data.poster_url,
               thumbnail: data.poster_url
             }])
-            console.log('[포스터 콜라주] Supabase 포스터 사용')
           } else {
             setMediaItems([])
           }
@@ -768,7 +765,6 @@ export default function Content() {
               : `Muuvi에서 발견한 인생 영화! "${title}"`,
             files: [file],
           })
-          console.log('공유 성공')
         } catch (shareError) {
           // 사용자가 공유 취소한 경우 등 에러 처리
           if ((shareError as Error).name !== 'AbortError') {
@@ -842,7 +838,7 @@ export default function Content() {
         }
       } catch (error) {
         // CORS 에러 등으로 인한 실패 시 기본값 사용
-        console.warn('이미지 밝기 계산 실패 (CORS 또는 기타 오류):', error)
+        // 이미지 밝기 계산 실패 시 무시
         setIsBackgroundDark(true) // 포스터가 있으면 보통 어두운 배경
       }
     }

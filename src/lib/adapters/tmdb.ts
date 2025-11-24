@@ -60,7 +60,6 @@ export function tmdbToContent(
   // 제목 검증
   const contentTitle = details.ko.title || movie.title || movie.name || ''
   if (!contentTitle) {
-    console.warn('제목이 없는 콘텐츠:', movie.id)
     return null
   }
 

@@ -23,7 +23,6 @@ function buildImageUrl(path?: string | null, size: 'w154' | 'w185' | 'w342' | 'w
 export async function searchTMDB(query: string, language: 'ko' | 'en' = 'ko'): Promise<NormalizedSearchResult[]> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) {
-    console.warn('VITE_TMDB_API_KEY가 설정되어 있지 않습니다.')
     return []
   }
 
@@ -85,7 +84,6 @@ export async function getTMDBDetail(
 ): Promise<TMDBDetail | null> {
   const apiKey = import.meta.env.VITE_TMDB_API_KEY
   if (!apiKey) {
-    console.warn('VITE_TMDB_API_KEY가 설정되어 있지 않습니다.')
     return null
   }
   const langParam = language === 'en' ? 'en-US' : 'ko-KR'

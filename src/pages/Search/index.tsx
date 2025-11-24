@@ -121,7 +121,6 @@ export default function Search() {
       
       // 2. 제목 검색 결과가 하나도 없다면? -> AI에게 물어봅니다.
       if (data.length === 0) {
-        console.log('제목 검색 결과 없음, AI 추천으로 전환:', value)
         data = await searchWithAI(value)
       }
       

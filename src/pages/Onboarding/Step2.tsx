@@ -172,24 +172,12 @@ export default function OnboardingStep2() {
       // [수정] 실제 user_id 사용 (로그인한 사용자는 user.id, 비로그인은 temp-user-id)
       const userId = user?.id || 'temp-user-id'
       
-      // 디버깅: 저장할 데이터 확인
-      console.log('[온보딩 Step2 저장]', {
-        userId,
-        genre: updatedData.genre,
-        moods: updatedData.moods,
-        moodNames: updatedData.moods.map(id => {
-          const mood = genres.find(g => g.id === id)
-          return mood ? (language === 'en' ? mood.english : mood.korean) : id
-        }),
-      })
-      
       await saveProfile(userId, updatedData)
 
       // [추가] 온보딩 완료 후 이전 추천 데이터 초기화 (새로운 선택으로 인한 추천 업데이트를 위해)
       sessionStorage.removeItem('mainRecommendations')
 
       // [추가] 메인 페이지로 이동하기 전에 추천 데이터 미리 로드
-      console.log('[온보딩 Step2] 추천 데이터 미리 로드 시작')
       try {
         // 프로필 가져오기
         const profile = await getProfile(userId)
@@ -211,8 +199,6 @@ export default function OnboardingStep2() {
           // sessionStorage에 저장 (메인 페이지에서 사용)
           sessionStorage.setItem('mainRecommendations', JSON.stringify(finalContents))
           sessionStorage.setItem('mainProfile', JSON.stringify(profile))
-          
-          console.log('[온보딩 Step2] 추천 데이터 미리 로드 완료:', finalContents.length, '개')
         }
       } catch (error) {
         console.error('[온보딩 Step2] 추천 데이터 미리 로드 실패:', error)
