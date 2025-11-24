@@ -6,12 +6,12 @@ async function getFunctionAuthHeaders() {
   let serviceKey = ''
 
   if (isDeno) {
-    // @ts-expect-error: Deno globals only in edge runtime
+    // @ts-ignore: Deno globals only in edge runtime
     anonKey =
       Deno.env.get('SUPABASE_ANON_KEY') ||
       Deno.env.get('VITE_SUPABASE_ANON_KEY') ||
       ''
-    // @ts-expect-error: Deno globals only in edge runtime
+    // @ts-ignore: Deno globals only in edge runtime
     serviceKey =
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
       Deno.env.get('VITE_SUPABASE_SERVICE_ROLE_KEY') ||

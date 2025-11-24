@@ -11,12 +11,12 @@ import type {
 import { tmdbToContent, type TMDBDetails } from '../adapters/tmdb.ts'
 
 // Deno 환경인지 확인 (Supabase Edge Function)
-// @ts-expect-error: 'Deno' is not defined in Vite/Node.js environment
+// @ts-ignore: 'Deno' is not defined in Vite/Node.js environment
 const isDeno = typeof Deno !== 'undefined'
 
 // Deno(백엔드)일 경우 Deno.env.get()을, Vite(프론트엔드)일 경우 import.meta.env를 사용
 const TMDB_API_KEY = isDeno
-  // @ts-expect-error: Deno globals only in edge runtime
+  // @ts-ignore: Deno globals only in edge runtime
   ? Deno.env.get('VITE_TMDB_API_KEY') || ''
   : import.meta.env.VITE_TMDB_API_KEY || ''
 
