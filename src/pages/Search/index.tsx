@@ -62,7 +62,9 @@ export default function Search() {
         if (Array.isArray(parsed)) {
           setRecent(parsed.slice(0, 10))
         }
-      } catch {}
+      } catch {
+        // Ignore parse errors
+      }
     }
   }, [])
 
@@ -440,7 +442,6 @@ export default function Search() {
                 >
                   <div className="w-20 h-28 rounded-[8px] bg-[#e7e9ec] overflow-hidden">
                     {item.posterUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.posterUrl}
                         alt={item.title}

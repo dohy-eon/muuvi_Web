@@ -6,12 +6,12 @@ async function getFunctionAuthHeaders() {
   let serviceKey = ''
 
   if (isDeno) {
-    // @ts-ignore: Deno globals only in edge runtime
+    // @ts-expect-error: Deno globals only in edge runtime
     anonKey =
       Deno.env.get('SUPABASE_ANON_KEY') ||
       Deno.env.get('VITE_SUPABASE_ANON_KEY') ||
       ''
-    // @ts-ignore
+    // @ts-expect-error: Deno globals only in edge runtime
     serviceKey =
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
       Deno.env.get('VITE_SUPABASE_SERVICE_ROLE_KEY') ||
@@ -355,7 +355,7 @@ export async function getRecommendationsByText(queryText: string): Promise<Conte
     if (error) throw error
 
     // 3. 기본 OTT 필터링 (OTT 정보가 있는 것만)
-    let contentsWithOTT = (data || []).filter(
+    const contentsWithOTT = (data || []).filter(
       (content: Content) => content.ott_providers && content.ott_providers.length > 0
     )
 

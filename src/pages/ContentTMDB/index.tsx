@@ -168,7 +168,7 @@ export default function ContentTMDB() {
               (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
             setDirector(directorCandidate?.name ?? null)
             // 극본: Writer, Screenplay, Story, Novel, TV는 Creator 포함
-            let writerCandidate =
+            const writerCandidate =
               crew.find((p) => p.job === 'Writer') ||
               crew.find((p) => p.job === 'Screenplay') ||
               crew.find((p) => p.job === 'Story') ||
@@ -204,7 +204,7 @@ export default function ContentTMDB() {
                   crew.find((p) => p.department === 'Directing') ||
                   (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
                 setDirector(directorCandidate?.name ?? null)
-                let writerCandidate =
+                const writerCandidate =
                   crew.find((p) => p.job === 'Writer') ||
                   crew.find((p) => p.job === 'Screenplay') ||
                   crew.find((p) => p.job === 'Story') ||
@@ -228,6 +228,7 @@ export default function ContentTMDB() {
           fetchOttProviders(type, id).then((providers) => mounted && setOttProviders(providers))
         }
       } finally {
+        // Cleanup handled by mounted flag
       }
     })()
     return () => {

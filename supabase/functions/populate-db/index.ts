@@ -1,4 +1,4 @@
-// @ts-ignore: Deno 환경에서 제공되는 모듈
+// @ts-expect-error: Deno 환경에서 제공되는 모듈
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import {
   fetchAndSaveRecommendations,
@@ -6,7 +6,7 @@ import {
 } from '../../../src/lib/imdb/fetchContent.ts'
 
 // Deno 전역 선언 (Vite 빌드 오류 방지를 위함)
-// @ts-ignore
+// @ts-expect-error: Deno globals only in edge runtime
 declare const Deno: {
   env: {
     get(key: string): string | undefined
@@ -27,7 +27,7 @@ console.log('Populate DB Function Loaded (Single Job Mode)')
 
 const INTERNAL_SECRET =
   typeof Deno !== 'undefined'
-    ? // @ts-ignore Deno runtime
+    ? // @ts-expect-error: Deno runtime
       Deno.env.get('POPULATE_DB_SECRET') || ''
     : ''
 

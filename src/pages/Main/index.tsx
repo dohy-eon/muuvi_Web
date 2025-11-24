@@ -239,7 +239,7 @@ export default function Main() {
           }
           
           // 관심없음 콘텐츠 필터링
-          let filteredContents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
+          const filteredContents = contents.filter((content) => !notInterestedIdsFromDb.includes(content.id))
           
           // 최대 3개만 사용
           const finalContents = filteredContents.slice(0, 3)
