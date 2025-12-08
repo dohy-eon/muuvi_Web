@@ -105,7 +105,6 @@ export default function ContentTMDB() {
     credits: credits || undefined,
     ottProviders,
     type: type || 'movie',
-    language,
     t: { hour: t.hour, minute: t.minute },
   })
 

@@ -6,7 +6,6 @@ interface UseContentDataParams {
   credits: { cast: TMDBCredits['cast']; crew: TMDBCredits['crew'] } | null | undefined
   ottProviders: TMDBProvider[] | undefined
   type: 'movie' | 'tv'
-  language: 'ko' | 'en'
   t: {
     hour: string
     minute: string
@@ -43,7 +42,6 @@ export function useContentData({
   credits,
   ottProviders = [],
   type,
-  language,
   t,
 }: UseContentDataParams): UseContentDataReturn {
   // 장르 추출
