@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useRecoilValue } from 'recoil'
+import { useQuery } from '@tanstack/react-query'
 import { languageState } from '../../recoil/userState'
 import { getContentById } from '../../lib/supabase/recommendations'
 import type { Content, OTTProvider } from '../../types'
@@ -599,98 +600,91 @@ type OttFilterType = 'flatrate' | 'free' | 'rent' | 'buy' | null
 export default function Content() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  // [추가] 언어 상태 가져오기
   const language = useRecoilValue(languageState)
   const t = CONTENT_TEXT[language]
-  const [content, setContent] = useState<Content | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [ottProviders, setOttProviders] = useState<OTTProvider[]>([])
   const [selectedFilter, setSelectedFilter] = useState<OttFilterType>(null)
-  const [ageRating, setAgeRating] = useState<string | null>(null)
-  const [runtime, setRuntime] = useState<string | null>(null)
-  const [isBackgroundDark, setIsBackgroundDark] = useState(true) // 기본값: 어두운 배경 (포스터가 있을 가능성이 높음)
-  const [cast, setCast] = useState<Array<{ id: number; name: string; character: string; profile_path: string | null }>>([])
-  const [director, setDirector] = useState<string | null>(null)
-  const [writer, setWriter] = useState<string | null>(null)
-  const [mediaItems, setMediaItems] = useState<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>>([])
-  
-  // [추가] 캡처할 포스터 영역 ref
+  const [isBackgroundDark, setIsBackgroundDark] = useState(true)
   const posterRef = useRef<HTMLDivElement>(null)
-  // [추가] 공유 진행 중 상태
   const [isSharing, setIsSharing] = useState(false)
 
-  useEffect(() => {
-    const loadContent = async () => {
-      if (!id) {
-        setError('콘텐츠 ID가 없습니다.')
-        setIsLoading(false)
-        return
-      }
+  // 콘텐츠 기본 정보 가져오기
+  const {
+    data: content,
+    isLoading: isContentLoading,
+    isError: isContentError,
+  } = useQuery({
+    queryKey: ['content', id],
+    queryFn: () => {
+      if (!id) throw new Error('콘텐츠 ID가 없습니다.')
+      return getContentById(id)
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000, // 5분간 캐시 유지
+    gcTime: 10 * 60 * 1000, // 10분간 메모리 유지
+  })
 
-      try {
-        setIsLoading(true)
-        setError(null)
-        const data = await getContentById(id)
-        
-        if (!data) {
-          setError(t.noContent)
-        } else {
-          setContent(data)
-          
-          // TMDB API로 타입별 OTT 정보, 연령 등급, 러닝타임, 출연진/제작진, 영상/이미지 가져오기
-          const contentType = data.genre === '영화' ? 'movie' : 'tv'
-          const [typedProviders, ratingAndRuntime, castAndCrew, videosAndImages] = await Promise.all([
-            getTypedOttProviders(data.imdb_id, contentType),
-            getContentRatingAndRuntime(data.imdb_id, contentType),
-            getCastAndCrew(data.imdb_id, contentType, data.title, data.year), // [수정] 제목과 연도 전달
-            getVideosAndImages(data.imdb_id, contentType)
-          ])
-          
-          // [수정] OTT 정보: TMDB 결과가 없으면 Supabase에 저장된 ott_providers 사용
-          if (typedProviders.length > 0) {
-            setOttProviders(typedProviders)
-          } else if (data.ott_providers && data.ott_providers.length > 0) {
-            // Supabase에 저장된 OTT 정보를 사용 (type이 없을 수 있으므로 기본값 설정)
-            const fallbackProviders: OTTProvider[] = data.ott_providers.map(provider => ({
-              ...provider,
-              type: provider.type || 'flatrate' // 기본값: 정액제
-            }))
-            setOttProviders(fallbackProviders)
-          } else {
-            setOttProviders([])
-          }
-          
-          setAgeRating(ratingAndRuntime.rating)
-          setRuntime(ratingAndRuntime.runtime)
-          setCast(castAndCrew.cast)
-          setDirector(castAndCrew.director)
-          setWriter(castAndCrew.writer)
-          
-          // [수정] 포스터 콜라주: TMDB 결과가 없으면 Supabase 포스터를 사용
-          if (videosAndImages.length > 0) {
-            setMediaItems(videosAndImages)
-          } else if (data.poster_url) {
-            // 포스터를 콜라주로 표시
-            setMediaItems([{
-              type: 'image' as const,
-              url: data.poster_url,
-              thumbnail: data.poster_url
-            }])
-          } else {
-            setMediaItems([])
-          }
-        }
-      } catch (err) {
-        console.error('콘텐츠 로드 실패:', err)
-        setError(t.error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const contentType = content?.genre === '영화' ? 'movie' : 'tv'
 
-    loadContent()
-  }, [id])
+  // TMDB 관련 데이터 가져오기 (콘텐츠가 있을 때만)
+  const {
+    data: tmdbData,
+    isLoading: isTmdbLoading,
+  } = useQuery({
+    queryKey: ['content-tmdb', id, content?.imdb_id, contentType],
+    queryFn: async () => {
+      if (!content?.imdb_id) return null
+
+      const [typedProviders, ratingAndRuntime, castAndCrew, videosAndImages] = await Promise.all([
+        getTypedOttProviders(content.imdb_id, contentType),
+        getContentRatingAndRuntime(content.imdb_id, contentType),
+        getCastAndCrew(content.imdb_id, contentType, content.title, content.year),
+        getVideosAndImages(content.imdb_id, contentType),
+      ])
+
+      return {
+        typedProviders,
+        ratingAndRuntime,
+        castAndCrew,
+        videosAndImages,
+      }
+    },
+    enabled: !!content?.imdb_id,
+    staleTime: 10 * 60 * 1000, // TMDB 데이터는 10분간 캐시 유지
+    gcTime: 30 * 60 * 1000, // 30분간 메모리 유지
+  })
+
+  // OTT 제공자 정보 처리
+  const ottProviders = tmdbData?.typedProviders && tmdbData.typedProviders.length > 0
+    ? tmdbData.typedProviders
+    : content?.ott_providers && content.ott_providers.length > 0
+    ? content.ott_providers.map(provider => ({
+        ...provider,
+        type: provider.type || 'flatrate' as const,
+      }))
+    : []
+
+  // 연령 등급 및 러닝타임
+  const ageRating = tmdbData?.ratingAndRuntime.rating || null
+  const runtime = tmdbData?.ratingAndRuntime.runtime || null
+
+  // 출연진/제작진
+  const cast = tmdbData?.castAndCrew.cast || []
+  const director = tmdbData?.castAndCrew.director || null
+  const writer = tmdbData?.castAndCrew.writer || null
+
+  // 영상/이미지
+  const mediaItems = tmdbData?.videosAndImages && tmdbData.videosAndImages.length > 0
+    ? tmdbData.videosAndImages
+    : content?.poster_url
+    ? [{
+        type: 'image' as const,
+        url: content.poster_url,
+        thumbnail: content.poster_url,
+      }]
+    : []
+
+  const isLoading = isContentLoading || isTmdbLoading
+  const isError = isContentError || (!content && !isContentLoading)
 
   // [수정] 언어에 따른 태그 선택
   const sourceTags = (language === 'en' && content?.tags_en && content.tags_en.length > 0)
@@ -865,11 +859,11 @@ export default function Content() {
     return <SimpleLoading />
   }
 
-  if (error || !content) {
+  if (isError || !content) {
     return (
       <div className="w-full h-screen bg-white relative font-pretendard overflow-hidden">
         <div className="flex flex-col items-center justify-center h-full px-6 bg-white">
-          <div className="text-red-600 mb-4">{error || t.noContent}</div>
+          <div className="text-red-600 mb-4">{t.noContent}</div>
           <button
             onClick={() => navigate(-1)}
             className="px-4 py-2 bg-[#2e2c6a] text-white rounded-lg hover:bg-[#3a3878] transition-colors"

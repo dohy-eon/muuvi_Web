@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { RecoilRoot } from 'recoil'
 import { lazy, Suspense } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './lib/react-query'
 import AuthProvider from './components/AuthProvider'
 import SimpleLoading from './components/SimpleLoading'
 
@@ -18,33 +20,35 @@ const Universe = lazy(() => import('./pages/Universe'))
 
 export default function App() {
   return (
-    <RecoilRoot>
-      <BrowserRouter>
-        <div
-          className="w-full min-h-screen flex justify-center"
-          style={{ backgroundColor: '#2e2c6a' }}
-        >
-          <div className="w-full max-w-[375px] min-h-screen relative">
-            <AuthProvider>
-              <Suspense fallback={<SimpleLoading />}>
-                <Routes>
-                  <Route path="/splash" element={<Splash />} />
-                  <Route path="/onboarding" element={<Onboarding />} />
-                  <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
-                  <Route path="/main" element={<Main />} />
-                  <Route path="/content/:id" element={<Content />} />
-                  <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
-                  <Route path="/mypage" element={<MyPage />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/search" element={<Search />} />
-                  <Route path="/universe" element={<Universe />} />
-                  <Route path="/" element={<Splash />} />
-                </Routes>
-              </Suspense>
-            </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <RecoilRoot>
+        <BrowserRouter>
+          <div
+            className="w-full min-h-screen flex justify-center"
+            style={{ backgroundColor: '#2e2c6a' }}
+          >
+            <div className="w-full max-w-[375px] min-h-screen relative">
+              <AuthProvider>
+                <Suspense fallback={<SimpleLoading />}>
+                  <Routes>
+                    <Route path="/splash" element={<Splash />} />
+                    <Route path="/onboarding" element={<Onboarding />} />
+                    <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
+                    <Route path="/main" element={<Main />} />
+                    <Route path="/content/:id" element={<Content />} />
+                    <Route path="/content/tmdb/:type/:id" element={<ContentTMDB />} />
+                    <Route path="/mypage" element={<MyPage />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/search" element={<Search />} />
+                    <Route path="/universe" element={<Universe />} />
+                    <Route path="/" element={<Splash />} />
+                  </Routes>
+                </Suspense>
+              </AuthProvider>
+            </div>
           </div>
-        </div>
-      </BrowserRouter>
-    </RecoilRoot>
+        </BrowserRouter>
+      </RecoilRoot>
+    </QueryClientProvider>
   )
 }

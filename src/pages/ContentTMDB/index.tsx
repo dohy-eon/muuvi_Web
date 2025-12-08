@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRecoilValue } from 'recoil'
 import BottomNavigation from '../../components/BottomNavigation'
 import { languageState } from '../../recoil/userState'
-import { buildPosterUrl, getTMDBDetail, type TMDBDetail } from '../../lib/tmdb/search'
-import type { TMDBMovieDetail, TMDBTVDetail, TMDBCredits } from '../../types/tmdb'
+import { buildPosterUrl } from '../../lib/tmdb/search'
+import { useTMDBDetail, useTMDBCredits, useTMDBProviders, useTMDBMedia } from '../../hooks/useTMDB'
+import { useContentData } from '../../hooks/useContentData'
 
 // UI 텍스트 번역
 const CONTENT_TMDB_TEXT = {
@@ -79,210 +80,64 @@ export default function ContentTMDB() {
   const language = useRecoilValue(languageState)
   const t = CONTENT_TMDB_TEXT[language]
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>()
-  const [detail, setDetail] = useState<TMDBDetail | null>(null)
-  // no explicit loading UI; we still fetch but render progressively
+
+  // React Query 훅들을 사용하여 데이터 가져오기
+  const { data: detail } = useTMDBDetail(type || 'movie', id || '', language)
+  const { data: credits } = useTMDBCredits(type || 'movie', id || '')
+  const { data: ottProviders = [] } = useTMDBProviders(type || 'movie', id || '')
+  const { data: mediaItems = [] } = useTMDBMedia(type || 'movie', id || '', language)
+
+  // 비즈니스 로직 분리된 커스텀 훅 사용
+  const {
+    genres,
+    ageRating,
+    runtime,
+    cast,
+    director,
+    writer,
+    displayOttProviders: baseDisplayOttProviders,
+    flatrateCount,
+    freeCount,
+    rentCount,
+    buyCount,
+  } = useContentData({
+    detail: detail || undefined,
+    credits: credits || undefined,
+    ottProviders,
+    type: type || 'movie',
+    t: { hour: t.hour, minute: t.minute },
+  })
+
   const [isBackgroundDark, setIsBackgroundDark] = useState(true)
-  const [ageRating, setAgeRating] = useState<string | null>(null)
-  const [runtime, setRuntime] = useState<string | null>(null)
-  const [genres, setGenres] = useState<Array<{ id: number; name: string }>>([])
-  const [cast, setCast] = useState<Array<{ id: number; name: string; character: string; profile_path: string | null }>>([])
-  const [director, setDirector] = useState<string | null>(null)
-  const [writer, setWriter] = useState<string | null>(null)
-  const [mediaItems, setMediaItems] = useState<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>>([])
-  const [ottProviders, setOttProviders] = useState<
-    Array<{ provider_id: number; provider_name: string; logo_path?: string; type: 'flatrate' | 'free' | 'rent' | 'buy' }>
-  >([])
   const [selectedFilter, setSelectedFilter] = useState<'flatrate' | 'free' | 'rent' | 'buy' | null>(null)
 
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      if (!type || !id) return
-      try {
-        const data = await getTMDBDetail(type, id, language)
-        if (mounted) {
-          if (!data) {
-            // TMDB에서 데이터를 찾을 수 없는 경우
-            console.error('TMDB 상세 정보를 찾을 수 없습니다:', { type, id })
-            return
-          }
-          setDetail(data)
-          // 기본 정보
-          const g = data.genres ?? []
-          setGenres(g)
+  // 필터링된 OTT Providers
+  const filteredOttProviders = useMemo(() => {
+    if (!selectedFilter) return baseDisplayOttProviders
+    return baseDisplayOttProviders.filter((p) => p.type === selectedFilter)
+  }, [selectedFilter, baseDisplayOttProviders])
 
-          // 연령등급
-          if (type === 'movie' && data.mediaType === 'movie') {
-            const movieData = data as TMDBMovieDetail
-            const rel = movieData.release_dates?.results?.find((r) => r.iso_3166_1 === 'KR')
-            const cert = rel?.release_dates?.[0]?.certification || null
-            setAgeRating(cert || null)
-            const rt = movieData.runtime
-            if (rt) {
-              const h = Math.floor(rt / 60)
-              const m = rt % 60
-              setRuntime(h > 0 ? `${h}${t.hour} ${m}${t.minute}` : `${m}${t.minute}`)
-            } else {
-              setRuntime(null)
-            }
-          } else if (type === 'tv' && data.mediaType === 'tv') {
-            const tvData = data as TMDBTVDetail
-            const ratings = tvData.content_ratings?.results || []
-            const kr = ratings.find((r) => r.iso_3166_1 === 'KR')
-            let rating = kr?.rating || null
-            if (!rating) {
-              const us = ratings.find((r) => r.iso_3166_1 === 'US')
-              rating = us?.rating || null
-              if (!rating) {
-                rating = ratings?.[0]?.rating || null
-              }
-            }
-            setAgeRating(rating)
-            const epi = tvData.episode_run_time?.[0]
-            if (epi) {
-              const h = Math.floor(epi / 60)
-              const m = epi % 60
-              setRuntime(h > 0 ? `${h}${t.hour} ${m}${t.minute}` : `${m}${t.minute}`)
-            } else {
-              setRuntime(null)
-            }
-          }
+  const displayOttProviders = filteredOttProviders
 
-          // 출연/제작
-          const credits = data.credits
-          if (credits && (credits.cast || credits.crew)) {
-            const castList = (credits.cast || []).slice(0, 6).map((actor) => ({
-              id: actor.id,
-              name: actor.name || '',
-              character: actor.character || actor.roles?.[0]?.character || '',
-              profile_path: actor.profile_path
-                ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
-                : null,
-            }))
-            setCast(castList)
-            const crew = credits.crew || []
-            // 감독: Director 우선, 없으면 Directing 부서 최상위, TV는 Executive Producer 보조
-            const directorCandidate =
-              crew.find((p) => p.job === 'Director') ||
-              crew.find((p) => p.department === 'Directing') ||
-              (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
-            setDirector(directorCandidate?.name ?? null)
-            // 극본: Writer, Screenplay, Story, Novel, TV는 Creator 포함
-            const writerCandidate =
-              crew.find((p) => p.job === 'Writer') ||
-              crew.find((p) => p.job === 'Screenplay') ||
-              crew.find((p) => p.job === 'Story') ||
-              crew.find((p) => p.job === 'Novel') ||
-              (type === 'tv' ? crew.find((p) => p.job === 'Creator') : undefined)
-            if (!writerCandidate && type === 'tv' && data.mediaType === 'tv') {
-              const tvData = data as TMDBTVDetail
-              const createdBy = tvData.created_by
-              if (Array.isArray(createdBy) && createdBy.length > 0) {
-                setWriter(createdBy.map((c) => c.name).filter(Boolean).join(', '))
-              } else {
-                setWriter(null)
-              }
-            } else {
-              setWriter(writerCandidate?.name ?? null)
-            }
-          } else {
-            // credits가 없거나 비어있을 경우 별도로 fetch 시도
-            fetchCredits(type, id).then((creditsData) => {
-              if (mounted && creditsData) {
-                const castList = (creditsData.cast || []).slice(0, 6).map((actor) => ({
-                  id: actor.id,
-                  name: actor.name || '',
-                  character: actor.character || actor.roles?.[0]?.character || '',
-                  profile_path: actor.profile_path
-                    ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
-                    : null,
-                }))
-                setCast(castList)
-                const crew = creditsData.crew || []
-                const directorCandidate =
-                  crew.find((p) => p.job === 'Director') ||
-                  crew.find((p) => p.department === 'Directing') ||
-                  (type === 'tv' ? crew.find((p) => p.job === 'Executive Producer') : undefined)
-                setDirector(directorCandidate?.name ?? null)
-                const writerCandidate =
-                  crew.find((p) => p.job === 'Writer') ||
-                  crew.find((p) => p.job === 'Screenplay') ||
-                  crew.find((p) => p.job === 'Story') ||
-                  crew.find((p) => p.job === 'Novel') ||
-                  (type === 'tv' ? crew.find((p) => p.job === 'Creator') : undefined)
-                if (!writerCandidate && type === 'tv') {
-                  // created_by는 별도로 가져와야 할 수도 있음
-                  setWriter(null)
-                } else {
-                  setWriter(writerCandidate?.name ?? null)
-                }
-              }
-            }).catch(() => {
-              // Credits fetch 실패 시 무시
-            })
-          }
+  const handleFilterClick = useCallback((ft: 'flatrate' | 'free' | 'rent' | 'buy') => {
+    setSelectedFilter((prev) => (prev === ft ? null : ft))
+  }, [])
 
-          // 이미지/비디오
-          fetchMedia(type, id, language).then((items) => mounted && setMediaItems(items))
-          // OTT 제공자
-          fetchOttProviders(type, id).then((providers) => mounted && setOttProviders(providers))
-        }
-      } finally {
-        // Cleanup handled by mounted flag
-      }
-    })()
-    return () => {
-      mounted = false
-    }
-  }, [type, id, language, t])
+  // 제목 및 연도 계산
+  const title = useMemo(() => {
+    return (detail && ('title' in detail ? detail.title : detail.name)) || t.detail
+  }, [detail, t.detail])
 
-  const title =
-    (detail && ('title' in detail ? detail.title : detail.name)) || t.detail
-  const year = (() => {
+  const year = useMemo(() => {
     if (!detail) return ''
     if (detail.mediaType === 'movie') {
       return detail.release_date?.slice(0, 4) || ''
     } else {
       return detail.first_air_date?.slice(0, 4) || ''
     }
-  })()
-  const poster = buildPosterUrl(detail && detail.poster_path)
-  // const backdrop = buildBackdropUrl(detail && detail.backdrop_path)
+  }, [detail])
 
-  const filteredOttProviders = selectedFilter ? ottProviders.filter((p) => p.type === selectedFilter) : ottProviders
-  const flatrateCount = ottProviders.filter((p) => p.type === 'flatrate').length
-  const freeCount = ottProviders.filter((p) => p.type === 'free').length
-  const rentCount = ottProviders.filter((p) => p.type === 'rent').length
-  const buyCount = ottProviders.filter((p) => p.type === 'buy').length
-
-  // 필터 미선택 시 동일 플랫폼(예: wavve)이 여러 타입으로 중복 노출되는 문제 방지
-  const dedupedOttProviders = (() => {
-    const priority: Record<'flatrate' | 'free' | 'rent' | 'buy', number> = {
-      flatrate: 0,
-      free: 1,
-      rent: 2,
-      buy: 3,
-    }
-    const map = new Map<number, { provider_id: number; provider_name: string; logo_path?: string; type: 'flatrate' | 'free' | 'rent' | 'buy' }>()
-    for (const p of ottProviders) {
-      const existing = map.get(p.provider_id)
-      if (!existing) {
-        map.set(p.provider_id, p)
-      } else {
-        // 더 높은 우선순위 타입을 유지
-        if (priority[p.type] < priority[existing.type]) {
-          map.set(p.provider_id, p)
-        }
-      }
-    }
-    return Array.from(map.values())
-  })()
-
-  const displayOttProviders = selectedFilter ? filteredOttProviders : dedupedOttProviders
-
-  const handleFilterClick = useCallback((ft: 'flatrate' | 'free' | 'rent' | 'buy') => {
-    setSelectedFilter((prev) => (prev === ft ? null : ft))
-  }, [])
+  const poster = useMemo(() => buildPosterUrl(detail?.poster_path), [detail?.poster_path])
 
   useEffect(() => {
     if (poster) {
@@ -747,138 +602,5 @@ export default function ContentTMDB() {
   )
 }
 
-async function fetchOttProviders(
-  type: 'movie' | 'tv',
-  id: string
-): Promise<Array<{ provider_id: number; provider_name: string; logo_path?: string; type: 'flatrate' | 'free' | 'rent' | 'buy' }>> {
-  const apiKey = import.meta.env.VITE_TMDB_API_KEY
-  if (!apiKey) return []
-  const endpoint = type === 'movie' ? 'movie' : 'tv'
-  const url = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/watch/providers`)
-  // watch/providers는 language 파라미터 무시되지만 형식을 통일
-  if (!apiKey.startsWith('eyJ')) {
-    url.searchParams.set('api_key', apiKey)
-  }
-  const res = await fetch(url.toString(), {
-    headers: apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : undefined,
-  }).catch(() => null)
-  if (!res || !res.ok) return []
-  const json = await res.json()
-  // KR가 비어있을 때를 대비해 US, JP 순으로 fallback
-  const regionOrder = ['KR', 'US', 'JP']
-  const regionKey = regionOrder.find((code) => json?.results?.[code]) as 'KR' | 'US' | 'JP' | undefined
-  const region = regionKey ? json.results[regionKey] : null
-  if (!region) return []
-  const list: Array<{ provider_id: number; provider_name: string; logo_path?: string; type: 'flatrate' | 'free' | 'rent' | 'buy' }> = []
-  ;(['flatrate', 'free', 'rent', 'buy'] as const).forEach((k) => {
-    const arr = region[k]
-    if (Array.isArray(arr)) {
-      arr.forEach((p) => {
-        if (p.provider_id && p.provider_name) {
-          list.push({
-            provider_id: p.provider_id,
-            provider_name: p.provider_name,
-            logo_path: p.logo_path ? `https://image.tmdb.org/t/p/w300${p.logo_path}` : undefined,
-            type: k,
-          })
-        }
-      })
-    }
-  })
-  return list
-}
-
-async function fetchCredits(
-  type: 'movie' | 'tv',
-  id: string
-): Promise<{ cast: TMDBCredits['cast']; crew: TMDBCredits['crew'] } | null> {
-  const apiKey = import.meta.env.VITE_TMDB_API_KEY
-  if (!apiKey) return null
-  const endpoint = type === 'movie' ? 'movie' : 'tv'
-  const url = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/credits`)
-  
-  if (!apiKey.startsWith('eyJ')) {
-    url.searchParams.set('api_key', apiKey)
-  }
-  
-  const res = await fetch(url.toString(), {
-    headers: apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : undefined,
-  }).catch(() => null)
-  
-  if (!res || !res.ok) return null
-  const json = (await res.json()) as { cast?: TMDBCredits['cast']; crew?: TMDBCredits['crew'] }
-  return {
-    cast: json.cast || [],
-    crew: json.crew || [],
-  }
-}
-
-async function fetchMedia(
-  type: 'movie' | 'tv',
-  id: string,
-  language: 'ko' | 'en' = 'ko'
-): Promise<Array<{ type: 'video' | 'image'; url: string; thumbnail: string }>> {
-  const apiKey = import.meta.env.VITE_TMDB_API_KEY
-  if (!apiKey) return []
-  const langParam = language === 'en' ? 'en-US' : 'ko-KR'
-  const endpoint = type === 'movie' ? 'movie' : 'tv'
-  const headers = apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : undefined
-  const videosUrl = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/videos`)
-  const imagesUrl = new URL(`https://api.themoviedb.org/3/${endpoint}/${id}/images`)
-  videosUrl.searchParams.set('language', langParam)
-  if (!apiKey.startsWith('eyJ')) {
-    videosUrl.searchParams.set('api_key', apiKey)
-    imagesUrl.searchParams.set('api_key', apiKey)
-  }
-  const [videosRes, imagesRes] = await Promise.all([
-    fetch(videosUrl.toString(), { headers }).catch(() => null),
-    fetch(imagesUrl.toString(), { headers }).catch(() => null),
-  ])
-  const items: Array<{ type: 'video' | 'image'; url: string; thumbnail: string }> = []
-  if (videosRes && videosRes.ok) {
-    const vd = (await videosRes.json()) as {
-      results?: Array<{ type?: string; key?: string }>
-    }
-    const vids = (vd.results || [])
-      .filter((v) => v.type === 'Trailer' || v.type === 'Teaser' || v.type === 'Clip')
-      .slice(0, 3)
-    vids.forEach((v) => {
-      if (v.key) {
-        items.push({
-          type: 'video',
-          url: `https://www.youtube.com/watch?v=${v.key}`,
-          thumbnail: `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`,
-        })
-      }
-    })
-  }
-  if (imagesRes && imagesRes.ok) {
-    const im = (await imagesRes.json()) as {
-      backdrops?: Array<{ file_path?: string }>
-      posters?: Array<{ file_path?: string }>
-    }
-    const backdrops = (im.backdrops || []).slice(0, 4)
-    backdrops.forEach((b) => {
-      if (b.file_path) {
-        items.push({
-          type: 'image',
-          url: `https://image.tmdb.org/t/p/original${b.file_path}`,
-          thumbnail: `https://image.tmdb.org/t/p/w500${b.file_path}`,
-        })
-      }
-    })
-    const posters = (im.posters || []).slice(0, 2)
-    posters.forEach((p) => {
-      if (p.file_path) {
-        items.push({
-          type: 'image',
-          url: `https://image.tmdb.org/t/p/original${p.file_path}`,
-          thumbnail: `https://image.tmdb.org/t/p/w500${p.file_path}`,
-        })
-      }
-    })
-  }
-  return items.slice(0, 9)
-}
 
 
