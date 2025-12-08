@@ -180,3 +180,18 @@ export interface TMDBContentDetails {
   description?: string
   descriptionEn?: string | null
 }
+
+// OTT Provider 타입 (정규화된 형태)
+export interface TMDBProvider {
+  provider_id: number
+  provider_name: string
+  logo_path?: string
+  type: 'flatrate' | 'free' | 'rent' | 'buy'
+}
+
+// Media Item 타입 (비디오/이미지)
+export interface TMDMMediaItem {
+  type: 'video' | 'image'
+  url: string
+  thumbnail: string
+}
